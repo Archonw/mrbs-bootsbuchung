@@ -1,0 +1,35 @@
+--- a/web/edit_entry_handler.php
++++ b/web/edit_entry_handler.php
+@@ -339,6 +339,32 @@
+       }
+     }
+   }
++
++  // Bootsbuchung-Anpassung: Teilnehmerzahl darf die Kapazitaet des Bootes nicht ueberschreiten.
++  // Kapazitaet 0 = keine Grenze. Mit $registrant_capacity_offset in der config.inc.php
++  // kann man Plaetze abziehen (z. B. 1 fuer den Segellehrer).
++  if ($enable_registration && $allow_registration)
++  {
++    $offset = isset($registrant_capacity_offset) ? (int) $registrant_capacity_offset : 0;
++    foreach ($rooms as $room_id)
++    {
++      $res = db()->query("SELECT room_name, capacity FROM " . _tbl('room') . " WHERE id=? LIMIT 1", array($room_id));
++      $room_row = $res->next_row_keyed();
++      if (empty($room_row) || ((int) $room_row['capacity'] <= 0))
++      {
++        continue;
++      }
++      $capacity = (int) $room_row['capacity'];
++      $max_registrants = max(0, $capacity - $offset);
++      if (!$registrant_limit_enabled || ($registrant_limit > $max_registrants))
++      {
++        $room_name = escape_html($room_row['room_name']);
++        invalid_booking("Die maximale Teilnehmeranzahl für <b>$room_name</b> darf höchstens " .
++                        "$max_registrants betragen (Kapazität: $capacity). " .
++                        "Bitte „Teilnehmerzahl begrenzen“ aktivieren und einen passenden Wert eintragen.");
++      }
++    }
++  }
+ }
+ 
+ if (!isset($type))

@@ -1,0 +1,55 @@
+# =============================================================================
+# Bootsbuchung – Docker-Dienste
+#
+# Alle Einstellungen kommen aus der .env (legt install.sh an):
+#   BB_BIND           wo die Buchung erreichbar ist, z. B. 127.0.0.1:8080 oder 0.0.0.0:80
+#   COMPOSE_PROFILES  "npm" = Nginx Proxy Manager mitstarten, leer = ohne
+#   DB_PASSWORD, DB_ROOT_PASSWORD, TZ
+# =============================================================================
+name: bootsbuchung
+
+services:
+  mrbs:
+    image: bootsbuchung-mrbs:latest      # gebaut von update.sh (MRBS + Patches)
+    container_name: mrbs
+    restart: unless-stopped
+    depends_on:
+      - mrbs-db
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ./config/config.inc.php:/var/www/html/config.inc.php:ro
+      - ./theme/verein:/var/www/html/Themes/verein:ro
+    ports:
+      - "${BB_BIND:-127.0.0.1:8080}:80"
+
+  mrbs-db:
+    image: mariadb:11.4
+    container_name: mrbs_db
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/Berlin}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: mrbs
+      MARIADB_USER: mrbs
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      # Dieselben Werte unter den alten Namen – die Wartungsskripte nutzen sie
+      MYSQL_DATABASE: mrbs
+      MYSQL_USER: mrbs
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./data/initdb:/docker-entrypoint-initdb.d:ro   # Tabellen beim ersten Start
+
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    profiles: ["npm"]
+    container_name: npm
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"        # Verwaltung – nach der Einrichtung in der Firewall schließen
+    volumes:
+      - ./data/npm:/data
+      - ./data/letsencrypt:/etc/letsencrypt

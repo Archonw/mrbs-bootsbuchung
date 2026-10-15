@@ -1,0 +1,1201 @@
+/* =============================================================================
+   Theme "verein" – Bootsbuchung für Vereine (github.com/Archonw/mrbs-bootsbuchung)
+   Modernes Erscheinungsbild, hell/dunkel automatisch nach Geräte-Einstellung.
+
+   Aufbau:
+     1. Schrift (liegt im Theme, kein Google-Server – Datenschutz)
+     2. Farben als Variablen – hell, dann dunkel
+     3. Grundlayout
+     4. Kopfzeile
+     5. Navigation (Pfeile, Tag/Woche/Monat, Auswahlfelder)
+     6. Kalendertabelle und Buchungen
+     7. Mini-Kalender
+     8. Formulare
+     9. Fußzeile
+    10. Handy
+   ============================================================================= */
+
+/* ---------- 1. Schrift ---------------------------------------------------- */
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/figtree-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/figtree-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/figtree-latin-600-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Figtree'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/figtree-latin-700-normal.woff2') format('woff2'); }
+
+/* ---------- 2. Farben ----------------------------------------------------- */
+:root {
+  color-scheme: light dark;
+
+  --bb-bg: #e8ece7;
+  --bb-surface: #ffffff;
+  --bb-surface-2: #f7f8f6;
+  --bb-weekend: #f6f7f5;
+  --bb-weekend-2: #f0f2ef;
+  --bb-holiday: #eef1ed;
+  --bb-invalid: #e6e9e5;
+  --bb-border: #d3dad2;
+  --bb-border-soft: #e6eae5;
+  --bb-field-border: #c9d1c8;
+  --bb-text: #121714;
+  --bb-muted: #59635d;
+  --bb-link: #155f27;
+  --bb-link-hover: #0e4a1d;
+
+  --bb-accent: #1b7d33;          /* Vereinsgrün, abgedunkelt für Lesbarkeit */
+  --bb-accent-hover: #156528;
+  --bb-on-accent: #ffffff;
+  --bb-accent-tint: #e3f1e6;
+  --bb-on-tint: #14532a;
+  --bb-focus: rgba(27, 125, 51, 0.28);
+
+  --bb-banner: #0c0e0d;
+  --bb-banner-text: #f2f4f2;
+  --bb-banner-muted: #a7b0aa;
+  --bb-banner-hover: #1b201d;
+  --bb-banner-field: #1b201d;
+  --bb-banner-field-border: #2c332f;
+
+  --bb-danger: #b42318;
+  --bb-warning: #b54708;
+
+  --bb-type-a: #fdecc8; --bb-type-b: #d6e6f5; --bb-type-c: #efe3f7;
+  --bb-type-d: #fde1dc; --bb-type-e: #dcefe0; --bb-type-f: #e4e8e3;
+  --bb-type-g: #d8f0ea; --bb-type-h: #f5ecd9; --bb-type-i: #d4eedb;  /* I = normale Buchung: helles Grün */
+  --bb-type-j: #e9f5df;
+  --bb-on-type: #121714;
+  --bb-on-type-strong: #121714;
+  --bb-kurs: #fde6b2;            /* Kurse (Segellehrer) */
+  --bb-kurs-strong: #b45309;
+  --bb-mitsegeln-strong: #1b7d33; /* "Mitsegler willkommen" */
+  --bb-mitsegeln: #1b7d33;         /* kräftiges Grün – normale Buchungen sind hell */
+  --bb-on-mitsegeln: #ffffff;
+  --bb-streifen: #7cc890;          /* Handy-Streifen normaler Buchungen */
+
+  --bb-radius: 12px;
+  --bb-radius-sm: 8px;
+  --bb-shadow: 0 1px 2px rgba(16, 24, 20, 0.06), 0 4px 14px rgba(16, 24, 20, 0.07);
+  --bb-booking-shadow: drop-shadow(0 2px 2px rgba(16, 24, 20, 0.22)) drop-shadow(0 6px 14px rgba(16, 24, 20, 0.22));
+  --bb-booking-shadow-hover: drop-shadow(0 3px 3px rgba(16, 24, 20, 0.24)) drop-shadow(0 10px 22px rgba(16, 24, 20, 0.28));
+  --bb-booking-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.70), inset 0 -2px 0 rgba(16, 24, 20, 0.10);
+  --bb-booking-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.06) 100%);
+}
+
+/* Dunkel: automatisch nach Geräte-Einstellung, außer jemand hat per Knopf
+   "Hell" gewählt – oder per Knopf "Dunkel" erzwungen (siehe theme.js). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bb-bg: #090b0a;
+    --bb-surface: #1b201d;
+    --bb-surface-2: #181d1a;
+    --bb-weekend: #191e1b;
+    --bb-weekend-2: #171c19;
+    --bb-holiday: #20261f;
+    --bb-invalid: #232924;
+    --bb-border: #343d38;
+    --bb-border-soft: #283029;
+    --bb-field-border: #3c4640;
+    --bb-text: #e8ece9;
+    --bb-muted: #9aa39e;
+    --bb-link: #7fd497;
+    --bb-link-hover: #a6e3b6;
+
+    --bb-accent: #45c266;
+    --bb-accent-hover: #5fcf7c;
+    --bb-on-accent: #06130b;
+    --bb-accent-tint: #1d3324;
+    --bb-on-tint: #d3f0db;
+    --bb-focus: rgba(69, 194, 102, 0.35);
+
+    --bb-banner: #080a09;
+    --bb-banner-hover: #161a18;
+    --bb-banner-field: #161a18;
+    --bb-banner-field-border: #262c29;
+
+    --bb-danger: #ff7a6b;
+    --bb-warning: #f5a524;
+
+    --bb-type-a: #3a3220; --bb-type-b: #1f2d3b; --bb-type-c: #2f2538;
+    --bb-type-d: #3b2522; --bb-type-e: #1d3324; --bb-type-f: #252b28;
+    --bb-type-g: #1b332d; --bb-type-h: #352f22; --bb-type-i: #1b3a26;
+    --bb-type-j: #243320;
+    --bb-on-type: #e8ece9;
+    --bb-on-type-strong: #e8ece9;
+    --bb-kurs: #3d3016;
+    --bb-kurs-strong: #f5b14c;
+    --bb-mitsegeln-strong: #45c266;
+    --bb-mitsegeln: #45c266;
+    --bb-on-mitsegeln: #06130b;
+    --bb-streifen: #2e7d48;
+
+    --bb-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 6px 18px rgba(0, 0, 0, 0.45);
+    --bb-booking-shadow: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.75)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.70));
+    --bb-booking-shadow-hover: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.80)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.75));
+    --bb-booking-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+    --bb-booking-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.18) 100%);
+  }
+}
+
+:root[data-theme="dark"] {
+    --bb-bg: #090b0a;
+    --bb-surface: #1b201d;
+    --bb-surface-2: #181d1a;
+    --bb-weekend: #191e1b;
+    --bb-weekend-2: #171c19;
+    --bb-holiday: #20261f;
+    --bb-invalid: #232924;
+    --bb-border: #343d38;
+    --bb-border-soft: #283029;
+    --bb-field-border: #3c4640;
+    --bb-text: #e8ece9;
+    --bb-muted: #9aa39e;
+    --bb-link: #7fd497;
+    --bb-link-hover: #a6e3b6;
+
+    --bb-accent: #45c266;
+    --bb-accent-hover: #5fcf7c;
+    --bb-on-accent: #06130b;
+    --bb-accent-tint: #1d3324;
+    --bb-on-tint: #d3f0db;
+    --bb-focus: rgba(69, 194, 102, 0.35);
+
+    --bb-banner: #080a09;
+    --bb-banner-hover: #161a18;
+    --bb-banner-field: #161a18;
+    --bb-banner-field-border: #262c29;
+
+    --bb-danger: #ff7a6b;
+    --bb-warning: #f5a524;
+
+    --bb-type-a: #3a3220; --bb-type-b: #1f2d3b; --bb-type-c: #2f2538;
+    --bb-type-d: #3b2522; --bb-type-e: #1d3324; --bb-type-f: #252b28;
+    --bb-type-g: #1b332d; --bb-type-h: #352f22; --bb-type-i: #1b3a26;
+    --bb-type-j: #243320;
+    --bb-on-type: #e8ece9;
+    --bb-on-type-strong: #e8ece9;
+    --bb-kurs: #3d3016;
+    --bb-kurs-strong: #f5b14c;
+    --bb-mitsegeln-strong: #45c266;
+    --bb-mitsegeln: #45c266;
+    --bb-on-mitsegeln: #06130b;
+    --bb-streifen: #2e7d48;
+
+    --bb-shadow: 0 0 0 1px rgba(255, 255, 255, 0.02), 0 6px 18px rgba(0, 0, 0, 0.45);
+    --bb-booking-shadow: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.75)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.70));
+    --bb-booking-shadow-hover: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.80)) drop-shadow(0 12px 24px rgba(0, 0, 0, 0.75));
+    --bb-booking-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+    --bb-booking-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 45%, rgba(0, 0, 0, 0.18) 100%);
+  }
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"]  { color-scheme: dark; }
+
+/* ---------- 3. Grundlayout ------------------------------------------------ */
+body {
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+.contents {
+  padding: 1.5rem 1.75rem 1rem;
+}
+
+h1, h2, h3 { letter-spacing: -0.01em; }
+
+a:link, a:visited { text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+/* ---------- 4. Kopfzeile -------------------------------------------------- */
+.banner {
+  align-items: center;
+  gap: 0.75rem 1.5rem;
+  padding: 0.6rem 1.75rem;
+  border-bottom: 1px solid var(--bb-banner-field-border);
+}
+
+.banner .logo img {
+  height: 44px;
+  width: auto;
+  margin: 0;
+}
+
+.banner .company {
+  align-items: flex-start;
+  font-size: 1rem;
+  line-height: 1.2;
+  padding: 0;
+  margin: 0;
+}
+.banner .company > span:first-child {
+  font-size: 0.8rem;
+  color: var(--bb-banner-muted);
+  letter-spacing: 0.04em;
+}
+/* Untertitel: Der Link enthält den Namen des Systems (bei uns per
+   $vocab_override "Boote Logbuch / Buchung"), optional davor
+   $mrbs_company_more_info als kleine Zusatzzeile. */
+.banner .company .company_more_info {
+  font-size: 0.8rem;
+  color: var(--bb-banner-muted);
+}
+.banner .company > a:link,
+.banner .company > a:visited {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--bb-banner-text);
+  padding: 0;
+  margin: 0;
+  opacity: 1;
+}
+.banner .company > a:hover { text-decoration: underline; background: none; }
+
+.banner nav.container { padding: 0; gap: 0.5rem 1rem; }
+.banner nav.container > nav { padding: 0; }
+
+.banner nav a,
+nav.logon input,
+nav.logon span {
+  margin: 0 0 0 0.15rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--bb-radius-sm);
+  font-size: 0.93rem;
+  color: var(--bb-banner-text);
+  opacity: 0.88;
+}
+.banner nav a:hover, nav.logon input:hover,
+.banner nav a:focus-visible, nav.logon input:focus-visible {
+  background-color: var(--bb-banner-hover);
+  opacity: 1;
+}
+
+/* Menü-Knopf ☰ (von theme.js eingefügt) – nur am Handy sichtbar, siehe unten */
+.bb-menu-toggle { display: none; }
+
+/* Umschalter Automatisch/Hell/Dunkel (wird von theme.js eingefügt) */
+.bb-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  min-height: 36px;
+  border: 1px solid var(--bb-banner-field-border);
+  border-radius: 999px;
+  background: var(--bb-banner-field);
+  color: var(--bb-banner-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.bb-theme-toggle:hover,
+.bb-theme-toggle:focus-visible {
+  background: var(--bb-banner-hover);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--bb-focus);
+}
+
+/* Datum und Suche in der Kopfzeile */
+.banner input[type="date"],
+.banner input[type="search"],
+.banner input.navigation,
+.banner #search_str {
+  height: 38px;
+  box-sizing: border-box;
+  border: 1px solid var(--bb-banner-field-border);
+  border-radius: 10px;
+  background: var(--bb-banner-field);
+  color: var(--bb-banner-text);
+  padding: 0 0.75rem;
+  font: inherit;
+  font-size: 0.9rem;
+  color-scheme: dark;
+}
+.banner input[type="submit"]:not(nav.logon input) {
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--bb-banner-field-border);
+  background: var(--bb-banner-hover);
+  color: var(--bb-banner-text);
+  padding: 0 0.9rem;
+  margin-left: 0.4rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------- 5. Navigation ------------------------------------------------- */
+h2.date {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.75rem;
+}
+
+/* Pfeile + "Heute" als Button-Gruppe. MRBS gibt nav.arrow ein Drittel der
+   Breite (damit die Bootsauswahl mittig steht) – deshalb bekommen die
+   Buttons selbst den Rahmen, nicht der Container. */
+nav.arrow { align-items: center; }
+nav.arrow a {
+  background: var(--bb-surface) !important;
+  border: 1px solid var(--bb-border) !important;
+}
+nav.arrow a + a { border-left: 0 !important; }
+nav.arrow a:first-child { border-radius: 10px 0 0 10px !important; }
+nav.arrow a:last-child { border-radius: 0 10px 10px 0 !important; }
+nav.arrow a:hover, nav.arrow a:focus-visible { background: var(--bb-accent-tint) !important; }
+
+/* Tag/Woche/Monat als Segment-Schalter */
+nav.view div.container {
+  display: inline-flex;
+  background: var(--bb-invalid);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+nav.view a, nav.arrow a {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--bb-text) !important;
+  font-weight: 600;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  text-decoration: none;
+}
+nav.view a { border-radius: 8px; min-height: 36px; color: var(--bb-muted) !important; }
+
+nav a.selected,
+nav.view a:hover, nav.view a:focus-visible,
+nav.arrow a:hover, nav.arrow a:focus-visible {
+  background: var(--bb-accent-tint);
+  box-shadow: none;
+  color: var(--bb-on-tint) !important;
+}
+nav.view a.selected {
+  background: var(--bb-accent);
+  color: var(--bb-on-accent) !important;
+}
+
+/* Auswahlfelder (Bereich/Boot, "Erstellt von" usw. – MRBS nutzt dafür Select2) */
+.roomChangeForm select, .areaChangeForm select,
+.select2-container .select2-selection--single {
+  height: auto !important;
+  min-height: 42px;
+  border-radius: 10px !important;
+  border: 1px solid var(--bb-border) !important;
+  background: var(--bb-surface) !important;
+  color: var(--bb-text);
+}
+.select2-container .select2-selection__rendered { line-height: 40px !important; color: var(--bb-text) !important; }
+.select2-container .select2-selection__arrow { height: 40px !important; }
+.select2-dropdown { background: var(--bb-surface); border-color: var(--bb-border); color: var(--bb-text); }
+.select2-results__option--highlighted { background: var(--bb-accent) !important; color: var(--bb-on-accent) !important; }
+
+/* ---------- 6. Kalendertabelle -------------------------------------------- */
+.table_container {
+  border: 1px solid var(--bb-border);
+  border-radius: 16px;
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+}
+
+table.dwm_main {
+  border: 0;
+  border-radius: 16px;
+}
+
+.dwm_main thead th,
+.dwm_main tfoot th {
+  background-color: var(--bb-surface);   /* MRBS hat hier fest Weiß eingebaut */
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--bb-muted);
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+.dwm_main thead th a:link, .dwm_main thead th a:visited { color: var(--bb-muted); }
+.dwm_main thead tr:last-child th { border-bottom: 1px solid var(--bb-border); }
+.dwm_main thead tr:last-child th a:link,
+.dwm_main thead tr:last-child th a:visited {
+  color: var(--bb-text);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.dwm_main tfoot tr:first-child th { border-top: 1px solid var(--bb-border); }
+
+/* Heute hervorheben */
+.dwm_main th.today,
+.dwm_main th.today a:link, .dwm_main th.today a:visited { color: var(--bb-accent) !important; }
+.dwm_main th.today { box-shadow: inset 0 3px 0 var(--bb-accent); }
+/* Nur in Woche/Monat – in der Tagesansicht wäre sonst die ganze Tabelle getönt */
+#week_main tbody td.today, #month_main tbody td.today { background-image: linear-gradient(var(--bb-focus), var(--bb-focus)); background-size: 100% 100%; background-blend-mode: normal; }
+@supports (background: color-mix(in srgb, red, blue)) {
+  #week_main tbody td.today, #month_main tbody td.today { background-image: linear-gradient(color-mix(in srgb, var(--bb-accent) 6%, transparent), color-mix(in srgb, var(--bb-accent) 6%, transparent)); }
+}
+
+/* Bootsnamen links */
+.dwm_main tbody th {
+  font-weight: 600;
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+  text-align: left;
+}
+.dwm_main tbody tr:hover th, .dwm_main th.highlight { background-color: var(--bb-accent-tint) !important; }
+.dwm_main tbody tr:hover th a, .dwm_main th.highlight a { color: var(--bb-on-tint) !important; }
+.capacity { color: var(--bb-muted); font-weight: 500; }
+
+/* Freie Zellen beim Überfahren */
+.dwm_main td:hover.new, .dwm_main td.new_hover,
+.dwm_main#month_main td:hover.valid, .dwm_main#month_main td.valid_hover {
+  background-color: var(--bb-accent-tint) !important;
+}
+
+/* Buchungen als abgerundete Blöcke */
+.dwm_main .booked a,
+.all_rooms td a div:not(.free) {
+  border-bottom: 0;
+}
+.dwm_main td.booked,
+.all_rooms td a div:not(.free) {
+  color: var(--bb-on-type);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+/* Wochenansicht (alle Boote): schmale Streifen mit Lücke zum Nachbarn */
+.all_rooms td a div:not(.free) {
+  border-radius: var(--bb-radius-sm);
+  box-shadow: inset 0 0 0 2px var(--bb-surface);
+}
+.dwm_main td.booked a, .all_rooms td a div:not(.free) { color: var(--bb-on-type); }
+
+/* Buchungen ohne Typ – z. B. wenn die config.inc.php $booking_types aufhebt
+   (unset($booking_types)). MRBS lässt die Typ-Klasse dann in Tag-/Monats-
+   ansicht weg, die Buchung bliebe farblos. Sie bekommt die normale Farbe. */
+/* (Der Typ steht in der Tagesansicht am inneren .booking-Block, nicht an der
+   Zelle – deshalb wird der Block eingefärbt.) */
+.dwm_main .booking:not(.A):not(.B):not(.C):not(.D):not(.E):not(.F):not(.G):not(.H):not(.I):not(.J),
+.all_rooms td a div:not(.free):not(.A):not(.B):not(.C):not(.D):not(.E):not(.F):not(.G):not(.H):not(.I):not(.J) {
+  background: var(--bb-type-e);
+  color: var(--bb-on-type);
+}
+
+/* Angemeldet + eigene Buchung: MRBS' Skript zum Ziehen der Dauer setzt am
+   Block inline "background-color: transparent". Bei Buchungen mit Anmeldung
+   ist dann auch der Link darin durchsichtig – die Buchung wäre unsichtbar.
+   Deshalb erzwingt das Theme die Farbe am Block. */
+.dwm_main .booking.A { background-color: var(--bb-type-a) !important; }
+.dwm_main .booking.B { background-color: var(--bb-type-b) !important; }
+.dwm_main .booking.C { background-color: var(--bb-type-c) !important; }
+.dwm_main .booking.D { background-color: var(--bb-type-d) !important; }
+.dwm_main .booking.E { background-color: var(--bb-type-e) !important; }
+.dwm_main .booking.F { background-color: var(--bb-type-f) !important; }
+.dwm_main .booking.G { background-color: var(--bb-type-g) !important; }
+.dwm_main .booking.H { background-color: var(--bb-type-h) !important; }
+.dwm_main .booking.I { background-color: var(--bb-type-i) !important; }
+.dwm_main .booking.J { background-color: var(--bb-type-j) !important; }
+.dwm_main .booking:not(.A):not(.B):not(.C):not(.D):not(.E):not(.F):not(.G):not(.H):not(.I):not(.J) {
+  background-color: var(--bb-type-e) !important;
+}
+.dwm_main .booking > a { background: transparent !important; }
+
+/* Abgerundete Buchungsblöcke mit schmalem Abstand zum Gitter. Der
+   durchsichtige Rand (statt margin) hält die Größe gleich, damit das
+   Ziehen der Dauer weiter exakt passt. */
+.dwm_main .booking {
+  box-sizing: border-box;
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background-clip: padding-box !important;
+}
+.dwm_main .booking > a { padding: 0.35rem 0.5rem; }
+
+/* Plastisch: weicher Schatten (als Filter, folgt der sichtbaren Form trotz
+   durchsichtigem Rand) und feine Lichtkante oben */
+.dwm_main .booking {
+  filter: var(--bb-booking-shadow);
+  box-shadow: var(--bb-booking-highlight);
+  background-image: var(--bb-booking-sheen);   /* leichte Wölbung */
+  transition: filter 0.15s ease;
+}
+.dwm_main .booking:hover { filter: var(--bb-booking-shadow-hover); }
+.all_rooms td a div:not(.free) { filter: var(--bb-booking-shadow); }
+.dwm_main td.booked { padding: 0; }
+
+/* Kräftiger Typ I (Kurs/intern): helle Schrift – egal ob der Typ an der
+   Zelle, am Block oder am Link steht */
+.dwm_main .I, .dwm_main .I a, .dwm_main a.I,
+.all_rooms td a div.I { color: var(--bb-on-type-strong) !important; }
+
+/* Buchungen mit Anmeldung: ruhige Vollfarbe statt Dreieck,
+   "voll" mit feinen Streifen */
+.spaces.A, .full.A { background: var(--bb-type-a); }
+.spaces.B, .full.B { background: var(--bb-type-b); }
+.spaces.C, .full.C { background: var(--bb-type-c); }
+.spaces.D, .full.D { background: var(--bb-type-d); }
+.spaces.E, .full.E { background: var(--bb-type-e); }
+.spaces.F, .full.F { background: var(--bb-type-f); }
+.spaces.G, .full.G { background: var(--bb-type-g); }
+.spaces.H, .full.H { background: var(--bb-type-h); }
+.spaces.I, .full.I { background: var(--bb-type-i); }
+.spaces.J, .full.J { background: var(--bb-type-j); }
+.full { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,0.12) 0 6px, transparent 6px 12px) !important; }
+tbody tr:nth-child(odd) .spaces { box-shadow: inset 0 0 0 2px var(--bb-surface); }
+
+/* Zeitlinie (aktuelle Uhrzeit) */
+div.timeline { background-color: var(--bb-accent); }
+
+/* Zweite Navigation unter dem Kalender ausblenden: MRBS scrollt nur den
+   Kalender, die obere Navigation bleibt ohnehin immer sichtbar */
+.table_container ~ nav.main_calendar { display: none !important; }
+
+/* Farblegende unter dem Kalender */
+.color_key { gap: 0.5rem; margin-top: 1rem; }
+.color_key > div {
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.color_key > div.I { color: var(--bb-on-type-strong); }
+
+/* ---------- 7. Mini-Kalender ---------------------------------------------- */
+.flatpickr-calendar {
+  background: var(--bb-surface) !important;
+  border: 1px solid var(--bb-border);
+  border-radius: var(--bb-radius) !important;
+  box-shadow: var(--bb-shadow) !important;
+  color: var(--bb-text);
+}
+.flatpickr-calendar .flatpickr-month,
+.flatpickr-calendar .flatpickr-current-month,
+.flatpickr-calendar .flatpickr-monthDropdown-months,
+.flatpickr-calendar input.cur-year,
+.flatpickr-calendar span.flatpickr-weekday,
+.flatpickr-calendar .flatpickr-prev-month, .flatpickr-calendar .flatpickr-next-month {
+  color: var(--bb-text) !important;
+  fill: var(--bb-text) !important;
+  background: transparent !important;
+}
+.flatpickr-calendar .flatpickr-weekdays { background: transparent; }
+.flatpickr-day { color: var(--bb-text); border-radius: 8px; }
+.flatpickr-day.prevMonthDay, .flatpickr-day.nextMonthDay { color: var(--bb-muted); opacity: 0.6; }
+.flatpickr-day:hover { background: var(--bb-accent-tint); border-color: transparent; }
+.flatpickr-day.today { border-color: var(--bb-accent); }
+.flatpickr-day.selected, .flatpickr-day.week.selected {
+  color: var(--bb-on-accent) !important;
+}
+/* Markierte Woche/Zeitraum (sonst festes Hellgrau, im Dunkelmodus unlesbar) */
+.flatpickr-day.inRange,
+.flatpickr-day.week.selected:not(.startRange):not(.endRange) {
+  background: var(--bb-accent-tint) !important;
+  border-color: var(--bb-accent-tint) !important;
+  box-shadow: -5px 0 0 var(--bb-accent-tint), 5px 0 0 var(--bb-accent-tint) !important;
+  color: var(--bb-on-tint) !important;
+}
+
+/* ---------- 8. Formulare -------------------------------------------------- */
+.contents input[type="text"],
+.contents input[type="email"],
+.contents input[type="password"],
+.contents input[type="number"],
+.contents input[type="date"],
+.contents input[type="search"],
+.contents input.form-control,
+.contents select,
+.contents textarea {
+  box-sizing: border-box;
+  min-height: 42px;
+  border: 1px solid var(--bb-field-border);
+  border-radius: 10px;
+  background-color: var(--bb-surface);
+  color: var(--bb-text);
+  padding: 0.45rem 0.75rem;
+  font: inherit;
+}
+.contents select[multiple] { padding: 0.35rem; }
+.contents textarea { min-height: 96px; }
+
+.contents input:focus-visible,
+.contents select:focus-visible,
+.contents textarea:focus-visible,
+.contents button:focus-visible {
+  outline: none;
+  border-color: var(--bb-accent);
+  box-shadow: 0 0 0 3px var(--bb-focus);
+}
+
+.contents input[type="checkbox"],
+.contents input[type="radio"] {
+  accent-color: var(--bb-accent);
+  width: 18px;
+  height: 18px;
+}
+
+/* Buttons: neutral, der Hauptbutton grün.
+   Ausnahme: input.link – das sind Buttons, die wie Links aussehen sollen
+   (z. B. die Namen in der Benutzerliste). */
+.contents input[type="submit"]:not(.link),
+.contents input[type="button"],
+.contents button:not(.image):not(.flatpickr-prev-month):not(.flatpickr-next-month) {
+  min-height: 42px;
+  padding: 0 1.1rem;
+  border-radius: 10px;
+  border: 1px solid var(--bb-field-border);
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.contents input[type="submit"]:not(.link):hover,
+.contents input[type="button"]:hover,
+.contents button:not(.image):hover { border-color: var(--bb-accent); }
+
+.contents input[type="submit"].default_action,
+#edit_entry_submit_save input,
+#edit_entry_submit_save button,
+.contents input[type="submit"][name="save_button"],
+.contents button[type="submit"]:not([formaction]) {
+  background: var(--bb-accent);
+  border-color: var(--bb-accent);
+  color: var(--bb-on-accent);
+}
+.contents input[type="submit"].default_action:hover,
+#edit_entry_submit_save input:hover,
+#edit_entry_submit_save button:hover {
+  background: var(--bb-accent-hover);
+}
+
+/* Buttons, die wie Links aussehen (Namen in der Benutzerliste u. a.) */
+.contents input.link[type="submit"] {
+  background: none;
+  border: 0;
+  padding: 0;
+  min-height: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bb-link);
+  cursor: pointer;
+  text-align: left;
+}
+.contents input.link[type="submit"]:hover { color: var(--bb-link-hover); text-decoration: underline; }
+
+/* ---------- Tabellen in Verwaltung, Bericht, Suche (DataTables) -----------
+   Die Bibliothek bringt fest eingebaute Hellblau/Weiß-Zeilen mit, die im
+   Dunkelmodus unlesbar sind. */
+table.admin_table,
+table.dataTable,
+table.display {
+  border-collapse: separate !important;
+  border-spacing: 0;
+  background: var(--bb-surface);
+  border: 1px solid var(--bb-border) !important;
+  border-radius: var(--bb-radius);
+  overflow: hidden;
+  color: var(--bb-text);
+}
+.admin_table th,
+table.dataTable thead th,
+table.dataTable thead td,
+table.dataTable thead .sorting,
+table.dataTable thead .sorting_asc,
+table.dataTable thead .sorting_desc {
+  background-color: var(--bb-surface-2) !important;
+  color: var(--bb-text) !important;
+  border-color: var(--bb-border) !important;
+  font-weight: 600;
+  text-align: left;
+}
+table.dataTable tbody tr,
+table.dataTable.display tbody tr.even,
+table.display tbody tr:nth-child(2n) {
+  background-color: var(--bb-surface) !important;
+}
+table.dataTable.display tbody tr.odd,
+table.display tbody tr:nth-child(2n+1) {
+  background-color: var(--bb-surface-2) !important;
+}
+/* Sortierspalten nicht extra einfärben */
+table.dataTable.display tbody tr > .sorting_1,
+table.dataTable.display tbody tr > .sorting_2,
+table.dataTable.display tbody tr > .sorting_3,
+table.dataTable.order-column tbody tr > .sorting_1,
+table.dataTable.order-column tbody tr > .sorting_2,
+table.dataTable.order-column tbody tr > .sorting_3 {
+  background-color: transparent !important;
+}
+table.dataTable tbody tr:hover > * { background-color: var(--bb-accent-tint) !important; }
+.admin_table td, .admin_table th,
+table.dataTable tbody th, table.dataTable tbody td {
+  border-color: var(--bb-border-soft) !important;
+  color: var(--bb-text);
+  padding: 0.6rem 0.75rem;
+}
+/* Werkzeugleiste der Tabelle (Spalten, Kopieren, CSV, Suche, Seiten) */
+.dataTables_wrapper,
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate { color: var(--bb-text) !important; }
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+  color: var(--bb-text) !important;
+  border-radius: 8px;
+  border: 1px solid transparent !important;
+  background: none !important;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button.current,
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: var(--bb-accent-tint) !important;
+  border-color: var(--bb-border) !important;
+  color: var(--bb-on-tint) !important;
+}
+div.dt-button-collection {
+  background: var(--bb-surface) !important;
+  border: 1px solid var(--bb-border) !important;
+  border-radius: var(--bb-radius);
+}
+.dt-button-collection .dt-button { color: var(--bb-text) !important; }
+.dt-button-collection .dt-button.active,
+.dt-button-collection .dt-button.dt-button-active { background: var(--bb-accent-tint) !important; color: var(--bb-on-tint) !important; }
+
+fieldset { border-color: var(--bb-border); }
+legend { font-weight: 700; }
+
+/* Vereinsspezifisch: Anmeldezeitfenster (beginnt/endet) ausblenden – wird
+   vorerst nicht gebraucht. Beide sind in MRBS standardmäßig aus, Buchungen
+   verhalten sich also unverändert. Zum Wiederanzeigen diese Regel löschen. */
+#registration > div:has([name="registration_opens_enabled"]),
+#registration > div:has([name="registration_closes_enabled"]) {
+  display: none;
+}
+
+/* Hinweis neben der Teilnehmerzahl (von theme.js) */
+.bb-capacity-hint {
+  margin-left: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--bb-muted);
+  align-self: center;
+}
+
+/* Formular-Labels etwas ruhiger */
+form label, .form_general label { color: var(--bb-text); font-weight: 600; }
+
+/* Fehlermeldungen */
+.error, .warning { color: var(--bb-danger); }
+
+/* ---------- 9. Fußzeile --------------------------------------------------- */
+.bb-footer {
+  text-align: center;
+  padding: 1.5rem 1rem 1rem;
+  font-size: 0.85rem;
+}
+.bb-footer a:link, .bb-footer a:visited {
+  color: var(--bb-muted);
+  text-decoration: none;
+}
+.bb-footer a:hover { text-decoration: underline; }
+
+/* MRBS ordnet den Seiteninhalt teils nebeneinander an und scrollt auf den
+   Kalenderseiten nur den Kalender. Damit das Impressum überall erreichbar
+   bleibt (Pflicht), sitzt es als kleines Schild unten rechts. */
+.bb-footer {
+  position: fixed;
+  right: 12px;
+  bottom: 10px;
+  z-index: 20;
+  padding: 0.3rem 0.8rem;
+  background: var(--bb-surface);
+  border: 1px solid var(--bb-border);
+  border-radius: 999px;
+  box-shadow: var(--bb-shadow);
+}
+
+/* ---------- 10. Handy ----------------------------------------------------- */
+@media (max-width: 700px) {
+  .contents { padding: 1rem 0.75rem 0.75rem; }
+
+  /* Kopfzeile in Zeilen: Wimpel + Titel, darunter Menü, darunter Datum.
+     MRBS blendet Wimpel und Untertitel am Handy aus – wir zeigen sie. */
+  .banner { padding: 0.6rem 0.9rem; gap: 0.5rem 0.75rem; }
+  .banner .logo { display: flex !important; }
+  .banner .logo img { height: 34px; }
+  .banner .company .company_more_info { display: block !important; }
+  .banner nav.container {
+    flex: 1 0 100%;
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  /* Menüpunkte umbrechen statt die Seite zu verbreitern – sonst verkleinert
+     das Handy die ganze Seite und alles wirkt zerbrochen */
+  .banner nav.container > nav,
+  .banner nav.container > nav > nav,
+  .banner nav.menu,
+  .banner nav.logon {
+    justify-content: flex-start;
+    flex-wrap: wrap !important;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .banner nav a, nav.logon input, nav.logon span { margin: 0; white-space: nowrap; }
+  .banner form, .banner input { min-width: 0; max-width: 100%; }
+
+  /* Hell/Dunkel-Knopf am Handy nur als Symbol (Beschriftung bleibt für
+     Screenreader über aria-label erhalten) */
+  .bb-theme-toggle { margin-left: 0.25rem; padding: 0; width: 40px; justify-content: center; }
+  .bb-theme-label { display: none; }
+  /* Datum + Start in einer Zeile, Suche darunter über die volle Breite */
+  .banner nav.container > nav:last-child { flex-wrap: wrap; gap: 0.5rem; }
+  .banner nav.container > nav:last-child > * { flex: 1 1 100%; }
+  .banner #form_nav { display: flex; width: 100%; }
+  .banner input[type="date"], .banner input.navigation { flex: 1; min-width: 0; }
+  .banner nav.container > nav:last-child form { display: flex; flex: 1 1 100%; }
+  .banner input[type="search"], .banner #search_str { flex: 1; width: 100%; }
+
+  /* Formularfelder über die volle Breite (MRBS setzt feste Breiten) */
+  .contents form input[type="text"]:not(.flatpickr-input):not([size="2"]),
+  .contents form input[type="email"],
+  .contents form input[type="password"],
+  .contents form textarea,
+  .contents form select[multiple] { width: 100% !important; max-width: 100% !important; }
+  h2.date { font-size: 1.35rem; }
+  nav.view a, nav.arrow a { min-height: 44px; padding: 0 0.85rem; }
+  nav.view a { min-height: 38px; }
+  .table_container { border-radius: 12px; }
+  .contents input[type="text"],
+  .contents input[type="email"],
+  .contents input[type="password"],
+  .contents input[type="number"],
+  .contents select,
+  .contents textarea { min-height: 46px; font-size: 16px; } /* 16px verhindert Zoom auf iOS */
+}
+
+/* ---------- 11. Handy: mehr Platz für den Kalender ------------------------ */
+@media (max-width: 700px) {
+
+  /* Kopfzeile kompakt: Wimpel + Titel + ☰. Menü, Datum und Suche klappen
+     über den Knopf auf. */
+  .banner { flex-wrap: wrap; padding: 0.5rem 0.75rem; row-gap: 0.25rem; }
+  .banner .logo img { height: 30px; }
+  .banner .company .company_more_info { font-size: 0.72rem; }
+  .banner .company > a:link, .banner .company > a:visited { font-size: 1rem; }
+
+  .bb-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--bb-banner-field-border);
+    border-radius: 10px;
+    background: var(--bb-banner-field);
+    color: var(--bb-banner-text);
+    cursor: pointer;
+  }
+  .bb-menu-toggle:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+
+  /* Nur einklappen, wenn der Knopf wirklich da ist – fehlt theme.js (z. B.
+     alte Version im Browser-Speicher), bleibt das Menü sichtbar */
+  .banner:has(.bb-menu-toggle) nav.container { display: none !important; }
+  .banner.bb-menu-open nav.container {
+    display: flex !important;
+    padding: 0.5rem 0 0.25rem;
+    border-top: 1px solid var(--bb-banner-field-border);
+    margin-top: 0.25rem;
+  }
+
+  /* Seitentitel und Navigation dichter */
+  .contents { padding-top: 0.6rem; }
+  h2.date { font-size: 1.15rem; margin: 0 0 0.5rem; }
+  nav.main_calendar { margin-bottom: 0.5rem; }
+
+  /* Kalender: Bootsnamen dürfen umbrechen, Kapazität ausblenden, schmale
+     Zeitspalte – so passen mehr Boote nebeneinander */
+  .dwm_main thead th {
+    white-space: normal;
+    line-height: 1.2;
+    font-size: 0.68rem;
+    padding: 0.4rem 0.15rem;
+    hyphens: auto;              /* Silbentrennung nach deutschen Regeln */
+    overflow-wrap: break-word;  /* nur notfalls mitten im Wort */
+    vertical-align: middle;
+  }
+  /* Woche/Monat: Datum "12. Okt." nicht umbrechen */
+  #week_main thead th, #month_main thead th {
+    white-space: nowrap;
+    font-size: 0.68rem;
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+  .dwm_main thead th a { white-space: normal; }
+  .dwm_main thead th a:link, .dwm_main thead th a:visited { font-size: inherit !important; }
+  .dwm_main .capacity { display: none; }
+
+  .dwm_main tbody th {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    width: 2.3rem;
+  }
+  .dwm_main thead th:first-child { width: 2.3rem; font-size: 0.65rem; }
+  /* Woche/Monat: erste Spalte sind Bootsnamen statt Uhrzeiten */
+  #week_main tbody th, #month_main tbody th {
+    width: 5.2rem;
+    min-width: 5.2rem;
+    max-width: 5.2rem;
+    white-space: normal;
+    line-height: 1.2;
+    font-size: 0.72rem;
+    hyphens: auto;
+  }
+  #week_main tbody th a, #month_main tbody th a { white-space: normal; }
+
+  /* Flachere Zeitraster: mehr Stunden auf einen Blick */
+  .dwm_main th, .dwm_main td { line-height: 1.7em; min-height: 1.7em; }
+  .dwm_main .booking { min-height: 1.7em; }
+  .dwm_main .booked.multiply .booking { height: 1.7em; }
+  .dwm_main .booking > a { padding: 0.2rem 0.35rem; font-size: 0.75rem; line-height: 1.25; }
+}
+
+/* ---------- 12. Woche/Monat (alle Boote): Buchungen gut erkennbar ---------
+   MRBS zeichnet Buchungen hier als Streifen, deren Breite der Dauer
+   entspricht – eine Stunde ist am Handy nur 2–3 px breit. Deshalb auf
+   Touch-Geräten (auch quer) und schmalen Bildschirmen: Mindestbreite,
+   kräftige Farbe, kein Innenrand/Schatten, der die Fläche auffrisst. */
+.all_rooms td a div.private,
+.dwm_main .booking.private { opacity: 0.85; }
+
+@media (max-width: 700px), (pointer: coarse) {
+  .all_rooms td a div:not(.free) {
+    min-width: 6px;
+    border: 0 !important;            /* MRBS: gepunktete Trennlinie */
+    background: var(--bb-streifen) !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    border-radius: 3px;
+    margin: 3px 1px;
+    color: var(--bb-on-accent) !important;
+    opacity: 1 !important;
+  }
+  /* Text passt in die schmalen Streifen ohnehin nicht */
+  .all_rooms td a div:not(.free) { font-size: 0; }
+}
+
+
+/* ---------- 13. Kurse und "Mitsegler willkommen" --------------------------
+   Grundlage ist die Teilnehmer-Anmeldung von MRBS. MRBS setzt an solchen
+   Buchungen "spaces" (Plätze frei) oder "full" (voll) und hängt die
+   Belegung an den Namen (" · 2/5", Text aus der config.inc.php).
+   Kurse (Zusatzfeld kurs, nur Segellehrer) tragen zusätzlich "bb-kurs".
+   - Mitsegeln: Marke "Mitsegeln" (hell, damit sie auch auf kräftig
+     grünen Buchungen vom Typ I lesbar ist)
+   - Kurs: eigene Farbe, orange Kante + Marke "Kurs"
+   - voll: wie bisher fein gestreift */
+.dwm_main .booking.bb-kurs {
+  background-color: var(--bb-kurs) !important;
+  color: var(--bb-on-type) !important;
+  box-shadow: var(--bb-booking-highlight), inset 4px 0 0 var(--bb-kurs-strong);
+}
+.dwm_main .booking.bb-kurs a { color: var(--bb-on-type) !important; }
+.all_rooms td a div.bb-kurs { background: var(--bb-kurs) !important; color: var(--bb-on-type) !important; }
+.all_rooms td a div.bb-kurs { box-shadow: inset 3px 0 0 var(--bb-kurs-strong); }
+
+/* Mitsegeln: kräftiges Grün – normale Buchungen sind hellgrün */
+.dwm_main .booking.spaces:not(.bb-kurs),
+.dwm_main .booking.full:not(.bb-kurs) {
+  background-color: var(--bb-mitsegeln) !important;
+  color: var(--bb-on-mitsegeln) !important;
+}
+.dwm_main .booking.spaces:not(.bb-kurs) a,
+.dwm_main .booking.full:not(.bb-kurs) a { color: var(--bb-on-mitsegeln) !important; }
+.all_rooms td a div.spaces:not(.bb-kurs),
+.all_rooms td a div.full:not(.bb-kurs) { background: var(--bb-mitsegeln) !important; color: var(--bb-on-mitsegeln) !important; }
+
+/* Marke vor dem Namen (Tagesansicht und Wochenansicht eines Bootes) */
+.dwm_main .booking.spaces > a::before,
+.dwm_main .booking.full > a::before {
+  content: "Mitsegeln";
+  display: inline-block;
+  margin-right: 0.35em;
+  padding: 0 0.4em;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  vertical-align: 0.08em;
+  background: var(--bb-surface);
+  color: var(--bb-mitsegeln-strong);
+  box-shadow: inset 0 0 0 1px var(--bb-mitsegeln-strong);
+}
+.dwm_main .booking.bb-kurs > a::before {
+  content: "Kurs";
+  background: var(--bb-kurs-strong);
+  color: #fff;
+  box-shadow: none;
+}
+.dwm_main .booking.full > a::before { content: "voll"; background: var(--bb-muted); color: var(--bb-surface); box-shadow: none; }
+.dwm_main .booking.bb-kurs.full > a::before { content: "Kurs · voll"; background: var(--bb-muted); }
+
+/* Handy/Touch: Streifen in der Wochen-/Monatsübersicht (siehe 12.) */
+@media (max-width: 700px), (pointer: coarse) {
+  .all_rooms td a div.bb-kurs { background: var(--bb-kurs-strong) !important; color: #fff !important; }
+  .all_rooms td a div.spaces:not(.bb-kurs),
+  .all_rooms td a div.full:not(.bb-kurs) { background: var(--bb-mitsegeln) !important; }
+}
+
+/* Buchungsformular */
+.bb-mitsegler-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.85em;
+  color: var(--bb-muted);
+}
+.bb-kurs-field label { font-weight: 600; }
+/* Das Formular setzt display:flex an seinen Zeilen – das würde das
+   hidden-Attribut aushebeln */
+.bb-kurs-field[hidden] { display: none !important; }
+/* vom Skript ausgeblendete Formularzeilen (Plätze …) */
+.bb-zeile-aus { display: none !important; }
+
+/* Buchung ansehen: Knopf "Teilnehmerliste drucken" */
+#registration .bb-print-list {
+  display: block;
+  width: max-content;
+  margin-top: 0.75rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--bb-border);
+  border-radius: var(--bb-radius-sm);
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+#registration .bb-print-list:hover { border-color: var(--bb-accent); }
+
+/* Buchung ansehen: Namensliste für Mitglieder (ohne Export-Knöpfe, kurs.patch)
+   – untereinander und nummeriert */
+#registration .bb-registrant-names {
+  list-style: none;
+  counter-reset: bb-tn;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0;
+  max-width: 28rem;
+}
+#registration .bb-registrant-names li {
+  counter-increment: bb-tn;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.45rem 0.25rem;
+  border-bottom: 1px solid var(--bb-border-soft);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--bb-text);
+}
+#registration .bb-registrant-names li:last-child { border-bottom: 0; }
+#registration .bb-registrant-names li::before {
+  content: counter(bb-tn);
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+
+/* ---------- 14. Seite "Mitsegeln & Kurse" (bb_mitsegeln.php) ------------- */
+#bb-mitsegeln { max-width: 54rem; margin: 0 auto; padding: 1rem 0 2rem; }
+#bb-mitsegeln h2 { margin: 0 0 0.25rem; }
+#bb-mitsegeln .bb-intro { margin: 0 0 1rem; color: var(--bb-muted); }
+#bb-mitsegeln .bb-filter { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.25rem; }
+#bb-mitsegeln .bb-filter a {
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--bb-border);
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  text-decoration: none;
+  font-weight: 600;
+}
+#bb-mitsegeln .bb-filter a.aktiv { background: var(--bb-accent); border-color: var(--bb-accent); color: var(--bb-on-accent); }
+#bb-mitsegeln .bb-leer { padding: 1.5rem; border-radius: var(--bb-radius); background: var(--bb-surface); color: var(--bb-muted); }
+
+#bb-mitsegeln .bb-fahrten { list-style: none; margin: 0; padding: 0; }
+#bb-mitsegeln .bb-tag {
+  margin: 1.1rem 0 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bb-muted);
+}
+#bb-mitsegeln .bb-tag:first-child { margin-top: 0; }
+#bb-mitsegeln .bb-fahrt { margin-bottom: 0.5rem; }
+#bb-mitsegeln .bb-fahrt > a {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr auto;
+  grid-template-areas: "zeit haupt plaetze" "zeit haupt status";
+  align-items: center;
+  gap: 0.15rem 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow), inset 4px 0 0 var(--bb-mitsegeln-strong);
+  color: var(--bb-text);
+  text-decoration: none;
+}
+#bb-mitsegeln .bb-fahrt.kurs > a { box-shadow: var(--bb-shadow), inset 4px 0 0 var(--bb-kurs-strong); }
+#bb-mitsegeln .bb-fahrt > a:hover { outline: 2px solid var(--bb-accent); outline-offset: -2px; }
+#bb-mitsegeln .zeit { grid-area: zeit; font-weight: 700; font-variant-numeric: tabular-nums; }
+#bb-mitsegeln .haupt { grid-area: haupt; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.5rem; min-width: 0; }
+#bb-mitsegeln .boot { font-weight: 700; font-size: 1.05rem; }
+#bb-mitsegeln .leitung { flex-basis: 100%; color: var(--bb-muted); font-size: 0.9rem; }
+#bb-mitsegeln .marke {
+  padding: 0 0.5em;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.6;
+  background: var(--bb-surface);
+  color: var(--bb-mitsegeln-strong);
+  box-shadow: inset 0 0 0 1px var(--bb-mitsegeln-strong);
+}
+#bb-mitsegeln .kurs .marke { background: var(--bb-kurs-strong); color: #fff; box-shadow: none; }
+#bb-mitsegeln .plaetze { grid-area: plaetze; justify-self: end; font-weight: 700; font-variant-numeric: tabular-nums; }
+#bb-mitsegeln .status { grid-area: status; justify-self: end; font-size: 0.85rem; color: var(--bb-accent); font-weight: 600; }
+#bb-mitsegeln .voll .status { color: var(--bb-muted); }
+#bb-mitsegeln .angemeldet > a { background: var(--bb-accent-tint); }
+#bb-mitsegeln .angemeldet .status { color: var(--bb-on-tint); }
+
+@media (max-width: 560px) {
+  #bb-mitsegeln { padding-top: 0.5rem; }
+  #bb-mitsegeln .bb-fahrt > a {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "zeit plaetze" "haupt haupt" "status status";
+  }
+  #bb-mitsegeln .status { justify-self: start; }
+}
+
+/* Buchung ansehen: Kursreihe – für alle Termine an-/abmelden (kurs.patch) */
+#registration .bb-reihe {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--bb-border-soft);
+  max-width: 40rem;
+}
+#registration .bb-reihe p { margin: 0 0 0.5rem; }
+/* "Meine": eigene Buchungen ohne Mitsegler */
+#bb-mitsegeln .bb-fahrt.buchung > a { box-shadow: var(--bb-shadow), inset 4px 0 0 var(--bb-streifen); }
+#bb-mitsegeln .buchung .marke { color: var(--bb-muted); box-shadow: inset 0 0 0 1px var(--bb-border); }
+#bb-mitsegeln .buchung .status { color: var(--bb-muted); }

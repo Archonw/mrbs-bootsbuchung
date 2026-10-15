@@ -1,0 +1,4 @@
+# Eigene Einstellungen und Daten – gehören nicht ins Repo
+.env
+config/config.inc.php
+data/

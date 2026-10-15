@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 80" width="110" height="40" role="img" aria-label="Bootsbuchung">
+  <!-- Wimpel: grünes Dreieck mit weißem Rand an einem Stock, darin ein Segelboot -->
+  <rect x="3" y="3" width="5" height="74" rx="2.5" fill="#d9ded9"/>
+  <path d="M8 7 L214 40 L8 73 Z" fill="#1b7d33" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+  <g fill="#ffffff">
+    <path d="M49 15 L49 48 L26 48 Z"/>
+    <path d="M53 21 L53 48 L74 48 Z" opacity="0.9"/>
+    <path d="M21 52 L82 52 L75 59 L28 59 Z"/>
+  </g>
+  <path d="M24 65 q7 -4 14 0 t14 0 t14 0 t14 0" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.75"/>
+</svg>

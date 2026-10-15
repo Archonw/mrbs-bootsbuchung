@@ -1,0 +1,152 @@
+diff --git a/web/mrbs_sql.inc b/web/mrbs_sql.inc
+index 07dbd11..28ae4dd 100644
+--- a/web/mrbs_sql.inc
++++ b/web/mrbs_sql.inc
+@@ -2945,6 +2945,13 @@ function mrbsMakeBookings(array $bookings, ?int $id=null, bool $just_check=false
+     $new_details[] = array('id' => $new_id, 'room_id' => $booking['room_id']);
+     $booking['id'] = $new_id;  // Add in the id now we know it
+ 
++    // Bootsbuchung-Anpassung: bei einer Bemerkung eine Meldung an den Bootswart senden
++    if (!empty($new_id))
++    {
++      require_once 'bb_bootswart.inc';
++      bb_notify_bootswart($booking, isset($id) ? (get_booking_info($id, false, true) ?: null) : null);
++    }
++
+     // Send an email if necessary, provided that the entry creation was successful
+     if ($send_mail && !empty($new_id))
+     {
+diff --git a/web/bb_bootswart.inc b/web/bb_bootswart.inc
+new file mode 100644
+index 0000000..38763e2
+--- /dev/null
++++ b/web/bb_bootswart.inc
+@@ -0,0 +1,128 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Meldung an den Bootswart
++//
++// Schreibt jemand bei einer Buchung etwas in das Bemerkungsfeld (in MRBS die
++// "Vollständige Beschreibung", bei uns "Gibt es etwas zu melden?"), geht eine
++// E-Mail an den Bootswart.
++//
++// Empfänger – in der Webseite pflegbar, ohne Code:
++//   - Bootswart:  "E-Mail-Adresse des Bereichsadministrators" (Verein bearbeiten)
++//   - Boot-Pate:  "E-Mail-Adresse des Raumadministrators" (Boot bearbeiten)
++// Beide bekommen dieselbe Mail, jede Adresse nur einmal (steht der Bootswart
++// auch beim Boot, gibt es keine doppelte Mail). Mehrere Adressen je Feld
++// durch Komma trennen.
++//
++// Gesendet wird bei neuen Buchungen mit Bemerkung und bei Änderungen, wenn sich
++// die Bemerkung geändert hat – nicht bei jeder Änderung erneut.
++// Der Versand nutzt die Mail-Einstellungen von MRBS ($mail_settings).
++// =============================================================================
++
++require_once 'functions_mail.inc';
++
++function bb_notify_bootswart(array $booking, ?array $previous) : void
++{
++  global $mail_settings;
++
++  $text = trim((string) ($booking['description'] ?? ''));
++  if ($text === '')
++  {
++    return;
++  }
++  if (!empty($previous) && (trim((string) ($previous['description'] ?? '')) === $text))
++  {
++    return;  // Bemerkung unverändert
++  }
++
++  $sql = "SELECT R.room_name, R.room_admin_email, A.area_admin_email
++            FROM " . _tbl('room') . " R, " . _tbl('area') . " A
++           WHERE R.id=? AND A.id=R.area_id
++           LIMIT 1";
++  $row = db()->query($sql, [$booking['room_id']])->next_row_keyed();
++  if (empty($row))
++  {
++    return;
++  }
++
++  // Bootswart (Bereich) und Boot-Pate (Raum) bekommen dieselbe Mail.
++  // Jede Adresse nur einmal – auch wenn sie in beiden Feldern steht,
++  // anders geschrieben ist (Groß/klein) oder mit Namen davor.
++  $to = [];
++  foreach (['area_admin_email', 'room_admin_email'] as $field)
++  {
++    if (isset($row[$field]) && (trim((string) $row[$field]) !== ''))
++    {
++      $parsed  = parse_addresses((string) $row[$field]);
++      $mailbox = address_merge([], (string) $row[$field]);  // gleiche Reihenfolge
++      foreach ($parsed as $i => $p)
++      {
++        $key = mb_strtolower(trim($p['address']));
++        if (($key !== '') && !isset($to[$key]))
++        {
++          $to[$key] = $mailbox[$i];
++        }
++      }
++    }
++  }
++  $to = array_values($to);
++  if (empty($to))
++  {
++    mail_debug('Bootswart-Meldung: keine Empfängeradresse im Bereich/Boot eingetragen');
++    return;
++  }
++
++  // Wer hat gebucht, wer hat gemeldet?
++  $booker = auth()->getUser($booking['create_by']);
++  $booker_name = (isset($booker) && ($booker->display_name !== '')) ? $booker->display_name : $booking['create_by'];
++  $reporter = session()->getCurrentUser();
++
++  $start = getMailTimeDateString((int) $booking['start_time']);
++  $end   = getMailTimeDateString((int) $booking['end_time']);
++  $url   = url_base() . multisite('view_entry.php?id=' . $booking['id']);
++
++  $short = (mb_strlen($text) > 50) ? mb_substr($text, 0, 50) . '…' : $text;
++  $short = preg_replace('/\s+/', ' ', $short);
++  $subject = "Meldung zu {$row['room_name']}: $short";
++
++  $lines = [];
++  $lines[] = empty($previous) ? 'Bei einer neuen Buchung wurde etwas gemeldet:'
++                              : 'Bei einer geänderten Buchung wurde die Meldung geändert:';
++  $lines[] = '';
++  $lines[] = $text;
++  $lines[] = '';
++  $lines[] = '----------------------------------------';
++  $lines[] = 'Boot:          ' . $row['room_name'];
++  $lines[] = 'Zeit:          ' . $start . ' – ' . $end;
++  $lines[] = 'Schiffsführer: ' . $booking['name'];
++  $lines[] = 'Gebucht von:   ' . $booker_name;
++  if (isset($reporter) && ($reporter->username !== $booking['create_by']))
++  {
++    $lines[] = 'Gemeldet von:  ' . (($reporter->display_name !== '') ? $reporter->display_name : $reporter->username);
++  }
++  $lines[] = '';
++  $lines[] = 'Buchung ansehen: ' . $url;
++  $body = implode(MAIL_EOL, $lines) . MAIL_EOL;
++
++  // Antworten gehen direkt an den, der gemeldet hat
++  $reply_to = '';
++  if (isset($reporter) && !empty($reporter->email))
++  {
++    $reply_to = $reporter->mailbox();
++  }
++  elseif (isset($booker) && !empty($booker->email))
++  {
++    $reply_to = $booker->mailbox();
++  }
++
++  $addresses = [
++    'from'     => $mail_settings['from'] ?? null,
++    'to'       => get_address_list($to),
++    'cc'       => '',
++    'reply_to' => $reply_to
++  ];
++
++  MailQueue::add($addresses, $subject, $body, null, null, Language::MAIL_CHARSET);
++}

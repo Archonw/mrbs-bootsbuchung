@@ -1,0 +1,1358 @@
+diff --git a/web/del_entry.php b/web/del_entry.php
+index f85b148..e64ae59 100644
+--- a/web/del_entry.php
++++ b/web/del_entry.php
+@@ -79,8 +79,17 @@ if ($info = get_booking_info($id, FALSE, TRUE))
+       }
+     }
+ 
++    // Bootsbuchung-Anpassung: Angemeldete merken, um ihnen nach dem Löschen abzusagen
++    require_once 'bb_kurs.inc';
++    $bb_vorher = bb_kurs_vor_loeschen((int) $id, (bool) $series);
++
+     $start_times = mrbsDelEntry($id, $series, true);
+ 
++    if (($start_times !== FALSE) && (count($start_times) > 0))
++    {
++      bb_kurs_nach_loeschen($bb_vorher);
++    }
++
+     // [At the moment MRBS does not inform the user if it was not able to delete
+     // an entry, or, for a series, some entries in a series.  This could happen for
+     // example if a booking policy is in force that prevents the deletion of entries
+diff --git a/web/edit_entry_handler.php b/web/edit_entry_handler.php
+index e6acf42..b64bcd4 100644
+--- a/web/edit_entry_handler.php
++++ b/web/edit_entry_handler.php
+@@ -260,6 +260,10 @@ foreach($fields as $field)
+   }
+ }
+ 
++// Bootsbuchung-Anpassung: "Kurs" nur durch Segellehrer; ein Kurs ist immer zur Anmeldung offen
++require_once 'bb_kurs.inc';
++bb_kurs_pruefen($custom_fields, $allow_registration, isset($id) ? (int) $id : null);
++
+ 
+ // (3) Clean up the form variables
+ // -------------------------------
+@@ -816,6 +820,11 @@ foreach ($rooms as $room_id)
+ 
+ $just_check = $is_ajax && !$commit;
+ $this_id = (isset($id)) ? $id : null;
++
++// Bootsbuchung-Anpassung: alten Stand merken, um Angemeldete über Änderungen zu informieren
++$bb_alt = (!$just_check && isset($id) && empty($edit_series)) ? (get_booking_info((int) $id, false, true) ?: null) : null;
++// ... bei Serien die Anmeldungen aller Termine (MRBS würde sie verwerfen)
++$bb_reihe = (!$just_check && isset($id) && !empty($edit_series)) ? bb_reihe_vor_aendern((int) $id) : null;
+ $send_mail = !$no_mail && need_to_send_mail();
+ 
+ try
+@@ -839,6 +848,16 @@ try
+   if ($transaction_ok)
+   {
+     db()->commit();
++
++    // Bootsbuchung-Anpassung: Angemeldete über geänderte Zeit/Boot informieren
++    if (!$just_check && $result['valid_booking'] && isset($bb_alt))
++    {
++      bb_kurs_nach_aendern($bb_alt, $result['new_details'] ?? []);
++    }
++    if (!$just_check && $result['valid_booking'] && isset($bb_reihe))
++    {
++      bb_reihe_nach_aendern($bb_reihe, $result['new_details'] ?? []);
++    }
+   }
+   else
+   {
+diff --git a/web/lib/MRBS/Calendar/Calendar.php b/web/lib/MRBS/Calendar/Calendar.php
+index efb712c..a5706ec 100644
+--- a/web/lib/MRBS/Calendar/Calendar.php
++++ b/web/lib/MRBS/Calendar/Calendar.php
+@@ -297,6 +297,12 @@ abstract class Calendar
+       }
+     }
+ 
++    // Bootsbuchung-Anpassung: Kurse kennzeichnen
++    if (!empty($entry['kurs']))
++    {
++      $classes[] = 'bb-kurs';
++    }
++
+     return $classes;
+   }
+ 
+diff --git a/web/registration_handler.php b/web/registration_handler.php
+index 33379fe..b5785aa 100644
+--- a/web/registration_handler.php
++++ b/web/registration_handler.php
+@@ -47,6 +47,10 @@ function cancel_registration(int $registration_id) : void
+     );
+ 
+   db()->command($sql, $sql_params);
++
++  // Bootsbuchung-Anpassung: Bestätigung und Info an den Segellehrer/Schiffsführer
++  require_once 'bb_kurs.inc';
++  bb_anmeldung_mail((int) $entry['id'], $registration['username'], false);
+ }
+ 
+ 
+@@ -61,6 +65,13 @@ function register_user(string $username, int $event_id) : void
+     return;
+   }
+ 
++  // Bootsbuchung-Anpassung: Wer die Buchung angelegt hat, segelt ohnehin mit
++  // (Schiffsführer/Segellehrer) und kann sich nicht zusätzlich anmelden
++  if (compare_usernames($username, $entry['create_by']) === 0)
++  {
++    return;
++  }
++
+   // Check that the user is an admin or else that the entry is open for registration
+   if (!is_book_admin($entry['room_id']) && !entry_registration_is_open($entry))
+   {
+@@ -92,12 +103,20 @@ function register_user(string $username, int $event_id) : void
+           'create_by'   => $mrbs_username,
+           'registered'  => time()
+         ));
++        $bb_registered = true;
+       }
+     }
+   }
+ 
+   // Release the lock
+   db()->mutex_unlock(_tbl('participants'));
++
++  // Bootsbuchung-Anpassung: Bestätigung und Info an den Segellehrer/Schiffsführer
++  if (!empty($bb_registered))
++  {
++    require_once 'bb_kurs.inc';
++    bb_anmeldung_mail($event_id, $username, true);
++  }
+ }
+ 
+ // Check the CSRF token.
+@@ -125,6 +144,24 @@ try
+       }
+       cancel_registration($registration_id);
+       break;
++    // Bootsbuchung-Anpassung: Kursreihe – für alle Termine an- bzw. abmelden
++    case 'register_series':
++    case 'cancel_series':
++      $username = get_form_var('username', 'string');
++      if (!isset($username) || ($username === '') || !isset($event_id))
++      {
++        throw new UnexpectedValueException("No username or event_id received from form.");
++      }
++      require_once 'bb_kurs.inc';
++      if ($action === 'register_series')
++      {
++        bb_reihe_anmelden($username, $event_id);
++      }
++      else
++      {
++        bb_reihe_abmelden($username, $event_id);
++      }
++      break;
+     case 'register':
+       $username = get_form_var('username', 'string');
+       if (!isset($username) || ($username === ''))
+diff --git a/web/bb_erinnerung.php b/web/bb_erinnerung.php
+new file mode 100644
+index 0000000..4545eda
+--- /dev/null
++++ b/web/bb_erinnerung.php
+@@ -0,0 +1,167 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Erinnerungsmail am Vortag
++//
++// Für alle Kurse und "Mitsegler willkommen"-Fahrten am nächsten Tag:
++//   - jede angemeldete Person bekommt eine Erinnerung
++//   - wer die Buchung angelegt hat, bekommt die Liste der Angemeldeten
++//
++// Nur von der Kommandozeile – täglich per Cron auf dem Server:
++//   docker exec mrbs php /var/www/html/bb_erinnerung.php --url=https://buchung.mein-verein.de
++// Optionen:
++//   --url=...        Adresse der Buchungsseite für die Links in den Mails
++//   --tag=JJJJ-MM-TT statt "morgen" einen bestimmten Tag (zum Testen)
++//   --probe          nichts verschicken, nur anzeigen
++// =============================================================================
++
++if (PHP_SAPI !== 'cli')
++{
++  http_response_code(404);
++  exit;
++}
++
++// Optionen lesen, bevor MRBS $argv anfasst
++$opts = getopt('', ['url::', 'tag::', 'probe']);
++$bb_url   = isset($opts['url']) ? rtrim((string) $opts['url'], '/') : '';
++$bb_tag   = isset($opts['tag']) ? (string) $opts['tag'] : '';
++$bb_probe = isset($opts['probe']);
++
++chdir(__DIR__);
++require "defaultincludes.inc";
++require_once "functions_mail.inc";
++require_once "bb_kurs.inc";
++
++$tz = new \DateTimeZone($timezone ?? date_default_timezone_get());
++$tag = ($bb_tag !== '')
++  ? \DateTime::createFromFormat('!Y-m-d', $bb_tag, $tz)
++  : (new \DateTime('tomorrow', $tz));
++if ($tag === false)
++{
++  fwrite(STDERR, "Ungültiges Datum: $bb_tag\n");
++  exit(1);
++}
++$tag->setTime(0, 0);
++$von = $tag->getTimestamp();
++$bis = (clone $tag)->modify('+1 day')->getTimestamp();
++
++$link = function (int $id) use ($bb_url) : string
++{
++  return ($bb_url !== '' ? $bb_url . '/' : url_base()) . 'view_entry.php?id=' . $id;
++};
++
++$res = db()->query(
++  "SELECT E.id FROM " . _tbl('entry') . " E
++     JOIN " . _tbl('room') . " R ON R.id = E.room_id
++    WHERE E.allow_registration = 1
++      AND R.disabled = 0
++      AND E.start_time >= ? AND E.start_time < ?
++    ORDER BY E.start_time",
++  [$von, $bis]);
++
++$ids = [];
++while (false !== ($row = $res->next_row_keyed()))
++{
++  $ids[] = (int) $row['id'];
++}
++
++$n_mails = 0;
++$n_termine = 0;
++foreach ($ids as $id)
++{
++  $data = get_booking_info($id, false, true);
++  if (empty($data) || empty($data['registrants']))
++  {
++    continue;
++  }
++
++  $is_kurs = !empty($data['kurs']);
++  $art     = $is_kurs ? 'Kurs' : 'Mitsegeln';
++  $room    = $data['room_name'] ?? get_room_name((int) $data['room_id']);
++  $zeit    = bb_zeitraum($data);
++  $leiter  = auth()->getUser($data['create_by']);
++  $leiter_nm = (isset($leiter) && ($leiter->display_name !== '')) ? $leiter->display_name : $data['create_by'];
++
++  $namen = [];
++  foreach ($data['registrants'] as $r)
++  {
++    $u = auth()->getUser($r['username']);
++    $namen[] = (isset($u) && ($u->display_name !== '')) ? $u->display_name : $r['username'];
++  }
++  sort($namen, SORT_FLAG_CASE | SORT_STRING);
++
++  $n_termine++;
++  echo date('Y-m-d H:i', (int) $data['start_time']) . "  $art  $room  (" . count($namen) . " angemeldet)\n";
++
++  if ($bb_probe)
++  {
++    continue;
++  }
++
++  // An jede angemeldete Person
++  foreach ($data['registrants'] as $r)
++  {
++    $person = auth()->getUser($r['username']);
++    if (!isset($person) || empty($person->email))
++    {
++      continue;
++    }
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $person->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($leiter) && !empty($leiter->email)) ? $leiter->mailbox() : ''
++      ],
++      "Erinnerung: $art morgen, $room",
++      implode(MAIL_EOL, [
++        'Kurze Erinnerung – morgen geht es los:',
++        '',
++        'Art:            ' . ($is_kurs ? 'Kurs' : 'Mitsegler willkommen'),
++        'Boot:           ' . $room,
++        'Zeit:           ' . $zeit,
++        ($is_kurs ? 'Segellehrer:    ' : 'Schiffsführer:  ') . $data['name'],
++        '',
++        'Kannst du nicht kommen, melde dich bitte ab:',
++        $link($id)
++      ]) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++    $n_mails++;
++  }
++
++  // An den, der die Buchung angelegt hat: Liste der Angemeldeten
++  if (isset($leiter) && !empty($leiter->email))
++  {
++    $lines = [
++      "Morgen: $art auf $room, $zeit",
++      '',
++      'Angemeldet (' . count($namen) . (!empty($data['registrant_limit_enabled']) ? ' von ' . (int) $data['registrant_limit'] : '') . '):'
++    ];
++    foreach ($namen as $i => $name)
++    {
++      $lines[] = '  ' . ($i + 1) . '. ' . $name;
++    }
++    $lines[] = '';
++    $lines[] = 'Teilnehmerliste zum Drucken: ' .
++               ($bb_url !== '' ? $bb_url . '/' : url_base()) . 'Themes/verein/teilnehmer.php?id=' . $id;
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $leiter->mailbox(),
++        'cc'       => '',
++        'reply_to' => ''
++      ],
++      "Morgen: $art $room – " . count($namen) . ' angemeldet',
++      implode(MAIL_EOL, $lines) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++    $n_mails++;
++  }
++}
++
++echo ($bb_probe ? 'Probelauf: ' : '') . "$n_termine Termin(e) mit Angemeldeten am " . $tag->format('d.m.Y') .
++     ($bb_probe ? '' : ", $n_mails Mail(s) verschickt") . "\n";
++// Die Mails verschickt MRBS beim Beenden (MailQueue::flush)
+diff --git a/web/bb_kurs.inc b/web/bb_kurs.inc
+new file mode 100644
+index 0000000..6cc4620
+--- /dev/null
++++ b/web/bb_kurs.inc
+@@ -0,0 +1,765 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\ElementFieldset;
++use MRBS\Form\ElementInputSubmit;
++use MRBS\Form\FieldDiv;
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Kurse und "Mitsegler willkommen"
++//
++// Grundlage ist die Teilnehmer-Anmeldung von MRBS ("allow_registration").
++// Jedes Mitglied kann sie nutzen ("Mitsegler willkommen"). Segellehrer können
++// eine Buchung zusätzlich als Kurs kennzeichnen.
++//
++// Benötigt die Spalten aus mrbs/sql/kursbuchung.sql:
++//   mrbs_users.segellehrer   Rolle (Haken beim Benutzer, nur Admins)
++//   mrbs_entry.kurs          Buchung ist ein Kurs
++//   mrbs_repeat.kurs
++// Fehlen die Spalten, verhält sich alles wie ohne diese Anpassung.
++// =============================================================================
++
++require_once 'functions_mail.inc';
++
++
++// Ist der Benutzer Segellehrer? Admins zählen immer mit.
++function bb_ist_segellehrer(?User $user) : bool
++{
++  if (!isset($user) || ($user->username === ''))
++  {
++    return false;
++  }
++  if ($user->level >= 2)
++  {
++    return true;
++  }
++  try
++  {
++    $value = db()->query1("SELECT segellehrer FROM " . _tbl('users') . " WHERE name=? LIMIT 1",
++                          [$user->username]);
++  }
++  catch (\Throwable $e)
++  {
++    return false;   // Spalte fehlt
++  }
++  return ((int) $value) === 1;
++}
++
++
++// Beim Speichern einer Buchung (edit_entry_handler.php):
++// - "Kurs" darf nur ein Segellehrer neu setzen; bei allen anderen bleibt der
++//   bisherige Wert (neue Buchung: kein Kurs). Abwählen geht immer.
++// - Ein Kurs ist immer zur Anmeldung offen.
++function bb_kurs_pruefen(array &$custom_fields, &$allow_registration, ?int $id) : void
++{
++  if (!array_key_exists('kurs', $custom_fields))
++  {
++    return;   // Spalte nicht vorhanden
++  }
++
++  $kurs = !empty($custom_fields['kurs']);
++
++  if ($kurs && !bb_ist_segellehrer(session()->getCurrentUser()))
++  {
++    $old = isset($id) ? get_entry_by_id($id) : null;
++    $kurs = !empty($old['kurs']);
++  }
++
++  $custom_fields['kurs'] = $kurs ? 1 : 0;
++
++  if ($kurs)
++  {
++    $allow_registration = 1;
++    // Bei Kursen sitzt der Segellehrer nicht unbedingt mit im Boot: Plätze
++    // dürfen bis zur vollen Kapazität vergeben werden (kapazitaet.patch
++    // prüft danach mit diesem Wert).
++    global $registrant_capacity_offset;
++    $registrant_capacity_offset = 0;
++  }
++}
++
++
++// Mail bei An- oder Abmeldung (registration_handler.php):
++// - an die Person, die an- oder abgemeldet wurde (Bestätigung)
++// - an den, der die Buchung angelegt hat (Segellehrer/Schiffsführer)
++function bb_anmeldung_mail(int $entry_id, string $username, bool $angemeldet) : void
++{
++  global $mail_settings;
++
++  $data = get_booking_info($entry_id, false, true);
++  if (empty($data))
++  {
++    return;
++  }
++
++  $is_kurs = !empty($data['kurs']);
++  $art     = $is_kurs ? 'Kurs' : 'Mitsegeln';
++  $n       = count($data['registrants'] ?? []);
++  $belegt  = !empty($data['registrant_limit_enabled'])
++               ? "$n von " . (int) $data['registrant_limit'] . " Plätzen belegt"
++               : "$n angemeldet";
++
++  $person    = auth()->getUser($username);
++  $person_nm = (isset($person) && ($person->display_name !== '')) ? $person->display_name : $username;
++  $leiter    = auth()->getUser($data['create_by']);
++  $leiter_nm = (isset($leiter) && ($leiter->display_name !== '')) ? $leiter->display_name : $data['create_by'];
++  $current   = session()->getCurrentUser();
++
++  $room  = $data['room_name'] ?? get_room_name((int) $data['room_id']);
++  $start = getMailTimeDateString((int) $data['start_time']);
++  // Am selben Tag nur die Uhrzeit fürs Ende
++  $end   = (date('Ymd', (int) $data['start_time']) === date('Ymd', (int) $data['end_time']))
++             ? date('H:i', (int) $data['end_time'])
++             : getMailTimeDateString((int) $data['end_time']);
++  $url   = url_base() . multisite('view_entry.php?id=' . $entry_id);
++
++  $details = [
++    '----------------------------------------',
++    'Art:            ' . ($is_kurs ? 'Kurs' : 'Mitsegler willkommen'),
++    'Boot:           ' . $room,
++    'Zeit:           ' . $start . ' – ' . $end,
++    ($is_kurs ? 'Segellehrer:    ' : 'Schiffsführer:  ') . $data['name'],
++    'Angelegt von:   ' . $leiter_nm,
++    'Belegung:       ' . $belegt,
++    '',
++    'Buchung ansehen: ' . $url
++  ];
++
++  $wer_hat = '';
++  if (isset($current) && (compare_usernames($current->username, $username) !== 0))
++  {
++    $current_nm = ($current->display_name !== '') ? $current->display_name : $current->username;
++    $wer_hat = " (durch $current_nm)";
++  }
++
++  // 1. Bestätigung an die angemeldete Person
++  if (isset($person) && !empty($person->email))
++  {
++    $lines = [$angemeldet ? "Du bist angemeldet$wer_hat:" : "Du bist abgemeldet$wer_hat:", ''];
++    $subject = ($angemeldet ? 'Angemeldet' : 'Abgemeldet') . ": $art $room, $start";
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $person->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($leiter) && !empty($leiter->email)) ? $leiter->mailbox() : ''
++      ],
++      $subject,
++      implode(MAIL_EOL, array_merge($lines, $details)) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++  }
++
++  // 2. Info an den, der die Buchung angelegt hat (nicht an sich selbst)
++  if (isset($leiter) && !empty($leiter->email) &&
++      (compare_usernames($leiter->username, $username) !== 0))
++  {
++    $lines = [
++      $person_nm . ($angemeldet ? " hat sich angemeldet$wer_hat." : " hat sich abgemeldet$wer_hat."),
++      ''
++    ];
++    $subject = ($angemeldet ? 'Neue Anmeldung' : 'Abmeldung') . ": $person_nm – $art $room, $start";
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $leiter->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($person) && !empty($person->email)) ? $person->mailbox() : ''
++      ],
++      $subject,
++      implode(MAIL_EOL, array_merge($lines, $details)) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++  }
++}
++
++
++// Zeitangabe "Mittwoch, 21. Oktober 2026 um 10:00 – 12:00"
++function bb_zeitraum(array $data) : string
++{
++  $start = getMailTimeDateString((int) $data['start_time']);
++  $end   = (date('Ymd', (int) $data['start_time']) === date('Ymd', (int) $data['end_time']))
++             ? date('H:i', (int) $data['end_time'])
++             : getMailTimeDateString((int) $data['end_time']);
++  return "$start – $end";
++}
++
++
++// Mail an alle Angemeldeten einer Buchung (je Person eine eigene Mail,
++// damit niemand die Adressen der anderen sieht)
++function bb_mail_an_angemeldete(array $data, string $subject, array $lines) : void
++{
++  global $mail_settings;
++
++  $leiter = auth()->getUser($data['create_by']);
++  foreach ($data['registrants'] ?? [] as $r)
++  {
++    $person = auth()->getUser($r['username']);
++    if (!isset($person) || empty($person->email))
++    {
++      continue;
++    }
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $person->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($leiter) && !empty($leiter->email)) ? $leiter->mailbox() : ''
++      ],
++      $subject,
++      implode(MAIL_EOL, $lines) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++  }
++}
++
++
++// Vor dem Löschen (del_entry.php): Buchungen mit Angemeldeten merken
++function bb_kurs_vor_loeschen(int $id, bool $series) : array
++{
++  $ids = [$id];
++  if ($series)
++  {
++    $repeat_id = db()->query1("SELECT repeat_id FROM " . _tbl('entry') . " WHERE id=? LIMIT 1", [$id]);
++    if ($repeat_id > 0)
++    {
++      $ids = [];
++      $res = db()->query("SELECT id FROM " . _tbl('entry') . " WHERE repeat_id=?", [$repeat_id]);
++      while (false !== ($row = $res->next_row_keyed()))
++      {
++        $ids[] = (int) $row['id'];
++      }
++    }
++  }
++
++  $result = [];
++  foreach ($ids as $eid)
++  {
++    $data = get_booking_info($eid, false, true);
++    if (!empty($data) && !empty($data['allow_registration']) && !empty($data['registrants']))
++    {
++      $result[] = $data;
++    }
++  }
++  return $result;
++}
++
++
++// Nach dem Löschen: Absage an alle Angemeldeten der wirklich gelöschten Termine
++function bb_kurs_nach_loeschen(array $vorher) : void
++{
++  foreach ($vorher as $data)
++  {
++    if (get_entry_by_id((int) $data['id']) !== null)
++    {
++      continue;   // nicht gelöscht (z. B. Termin in der Vergangenheit)
++    }
++    $art  = !empty($data['kurs']) ? 'Kurs' : 'Mitsegeln';
++    $room = $data['room_name'] ?? get_room_name((int) $data['room_id']);
++    $leiter = auth()->getUser($data['create_by']);
++    $leiter_nm = (isset($leiter) && ($leiter->display_name !== '')) ? $leiter->display_name : $data['create_by'];
++    bb_mail_an_angemeldete($data,
++      "Abgesagt: $art $room, " . getMailTimeDateString((int) $data['start_time']),
++      [
++        "Der Termin, für den du angemeldet warst, wurde abgesagt.",
++        '',
++        'Art:            ' . (!empty($data['kurs']) ? 'Kurs' : 'Mitsegler willkommen'),
++        'Boot:           ' . $room,
++        'Zeit:           ' . bb_zeitraum($data),
++        'Abgesagt von:   ' . $leiter_nm,
++        '',
++        'Bei Fragen einfach auf diese Mail antworten.'
++      ]);
++  }
++}
++
++
++// Nach dem Ändern (edit_entry_handler.php): Haben sich Zeit oder Boot
++// geändert, bekommen alle Angemeldeten eine Mail.
++function bb_kurs_nach_aendern(?array $alt, array $new_details) : void
++{
++  if (empty($alt) || empty($alt['allow_registration']))
++  {
++    return;
++  }
++  foreach ($new_details as $nd)
++  {
++    $neu = get_booking_info((int) $nd['id'], false, true);
++    if (empty($neu) || empty($neu['registrants']))
++    {
++      continue;
++    }
++    if (((int) $neu['start_time'] === (int) $alt['start_time']) &&
++        ((int) $neu['end_time'] === (int) $alt['end_time']) &&
++        ((int) $neu['room_id'] === (int) $alt['room_id']))
++    {
++      continue;   // nur Text o. Ä. geändert
++    }
++    $art      = !empty($neu['kurs']) ? 'Kurs' : 'Mitsegeln';
++    $room_alt = $alt['room_name'] ?? get_room_name((int) $alt['room_id']);
++    $room_neu = $neu['room_name'] ?? get_room_name((int) $neu['room_id']);
++    $url      = url_base() . multisite('view_entry.php?id=' . $neu['id']);
++    bb_mail_an_angemeldete($neu,
++      "Geändert: $art $room_neu, " . getMailTimeDateString((int) $neu['start_time']),
++      [
++        'Ein Termin, für den du angemeldet bist, wurde geändert:',
++        '',
++        'Bisher:  ' . $room_alt . ', ' . bb_zeitraum($alt),
++        'Jetzt:   ' . $room_neu . ', ' . bb_zeitraum($neu),
++        '',
++        'Du bleibst angemeldet. Passt dir der neue Termin nicht, melde dich bitte ab:',
++        $url
++      ]);
++  }
++}
++
++
++// =============================================================================
++// Kursreihen (Serienbuchungen): für alle Termine an- und abmelden
++// =============================================================================
++
++// Kommende Termine einer Reihe, mit Belegung und ob $username angemeldet ist
++function bb_reihe_termine(int $repeat_id, string $username) : array
++{
++  $sql = "SELECT E.*, COUNT(P.id) AS n_registered,
++                 SUM(CASE WHEN P.username = ? THEN 1 ELSE 0 END) AS ich
++            FROM " . _tbl('entry') . " E
++       LEFT JOIN " . _tbl('participants') . " P ON P.entry_id = E.id
++           WHERE E.repeat_id = ?
++             AND E.start_time > ?
++        GROUP BY E.id
++        ORDER BY E.start_time";
++  $res = db()->query($sql, [$username, $repeat_id, time()]);
++  $result = [];
++  while (false !== ($row = $res->next_row_keyed()))
++  {
++    $ich = (int) $row['ich'];
++    $n   = (int) $row['n_registered'];
++    unset($row['ich'], $row['n_registered']);
++    row_cast_columns($row, 'entry');
++    unpack_status($row);
++    $row['ich'] = ($ich > 0);
++    $row['n_registered'] = $n;
++    $result[] = $row;
++  }
++  return $result;
++}
++
++
++// Liste der Termine als Text für Mails
++function bb_termin_zeilen(array $termine) : array
++{
++  $lines = [];
++  foreach ($termine as $t)
++  {
++    $lines[] = '  - ' . bb_zeitraum($t);
++  }
++  return $lines;
++}
++
++
++// Anzeige in der Buchung (view_entry.php): Knöpfe für die ganze Reihe
++function bb_reihe_block(array $row, ?string $previous_page, bool $can_register_others) : void
++{
++  global $area, $room;
++
++  if (empty($row['repeat_id']) || empty($row['allow_registration']))
++  {
++    return;
++  }
++  $user = session()->getCurrentUser();
++  if (!isset($user) || ($user->username === ''))
++  {
++    return;
++  }
++
++  $termine = bb_reihe_termine((int) $row['repeat_id'], $user->username);
++  $n = count($termine);
++  if ($n < 2)
++  {
++    return;   // nur noch ein Termin übrig – die normalen Knöpfe reichen
++  }
++
++  echo "<div class=\"bb-reihe\">\n";
++
++  // Der Ersteller (Segellehrer/Schiffsführer) bekommt nur die Übersicht
++  if (compare_usernames($user->username, $row['create_by']) === 0)
++  {
++    echo '<p>Diese Buchung gehört zu einer Reihe mit noch <strong>' . $n . "</strong> kommenden Terminen. " .
++         "Mitglieder können sich einzeln oder für alle Termine anmelden.</p>\n";
++    echo "</div>\n";
++    return;
++  }
++
++  $angemeldet = count(array_filter($termine, function ($t) { return $t['ich']; }));
++  $art = !empty($row['kurs']) ? 'Kursreihe' : 'Reihe';
++  echo '<p>Dieser Termin gehört zu einer ' . $art . ' mit noch <strong>' . $n . '</strong> kommenden Terminen. ' .
++       ($angemeldet ? "Du bist für <strong>$angemeldet</strong> davon angemeldet." : 'Du bist für keinen davon angemeldet.') . "</p>\n";
++
++  $knopf = function (string $action, string $label) use ($row, $previous_page, $area, $room, $user)
++  {
++    $form = new Form(Form::METHOD_POST);
++    $form->setAttributes(['action' => multisite('registration_handler.php'), 'class' => 'standard bb-reihe-form']);
++    $form->addHiddenInputs([
++      'action'   => $action,
++      'event_id' => $row['id'],
++      'username' => $user->username,
++      'returl'   => get_returl($previous_page),
++      'area'     => $area,
++      'room'     => $room
++    ]);
++    $fieldset = new ElementFieldset();
++    $field = new FieldDiv();
++    $element = new ElementInputSubmit();
++    $element->setAttribute('value', $label);
++    $field->addControl($element);
++    $fieldset->addElement($field);
++    $form->addElement($fieldset);
++    $form->render();
++  };
++
++  // Termine, für die noch eine Anmeldung möglich ist
++  $frei = count(array_filter($termine, function ($t) {
++    return !$t['ich'] &&
++           (empty($t['registrant_limit_enabled']) || ($t['n_registered'] < (int) $t['registrant_limit'])) &&
++           (is_book_admin($t['room_id']) || entry_registration_is_open($t));
++  }));
++  if ($frei > 0)
++  {
++    $knopf('register_series', ($angemeldet > 0) ? "Für die übrigen $frei Termine anmelden" : 'Für alle Termine anmelden');
++  }
++  elseif ($angemeldet < $n)
++  {
++    echo "<p>Die übrigen Termine sind voll.</p>\n";
++  }
++  if ($angemeldet > 0)
++  {
++    $knopf('cancel_series', 'Von allen Terminen abmelden');
++  }
++  echo "</div>\n";
++}
++
++
++// registration_handler.php: für alle kommenden Termine der Reihe anmelden.
++// Volle oder geschlossene Termine werden übersprungen. Eine Sammelmail.
++function bb_reihe_anmelden(string $username, int $event_id) : void
++{
++  $entry = get_entry_by_id($event_id);
++  if (!isset($entry) || empty($entry['repeat_id']) ||
++      !(can_register_others($entry['room_id']) || getWritable($username, $entry['room_id'])) ||
++      (compare_usernames($username, $entry['create_by']) === 0))
++  {
++    return;
++  }
++
++  $current = session()->getCurrentUser();
++  $neu = [];
++  $voll = [];
++
++  db()->mutex_lock(_tbl('participants'));
++  foreach (bb_reihe_termine((int) $entry['repeat_id'], $username) as $t)
++  {
++    if ($t['ich'] || empty($t['allow_registration']))
++    {
++      continue;
++    }
++    if (!is_book_admin($t['room_id']) && !entry_registration_is_open($t))
++    {
++      continue;
++    }
++    if (!empty($t['registrant_limit_enabled']) && ($t['n_registered'] >= (int) $t['registrant_limit']))
++    {
++      $voll[] = $t;
++      continue;
++    }
++    add_registrant((int) $t['id'], [
++      'username'   => $username,
++      'create_by'  => isset($current) ? $current->username : $username,
++      'registered' => time()
++    ]);
++    $neu[] = $t;
++  }
++  db()->mutex_unlock(_tbl('participants'));
++
++  if (!empty($neu))
++  {
++    bb_reihe_mail($entry, $username, true, $neu, $voll);
++  }
++}
++
++
++// registration_handler.php: von allen kommenden Terminen der Reihe abmelden
++function bb_reihe_abmelden(string $username, int $event_id) : void
++{
++  global $auth;
++
++  $entry = get_entry_by_id($event_id);
++  if (!isset($entry) || empty($entry['repeat_id']))
++  {
++    return;
++  }
++  $current = session()->getCurrentUser();
++  if (!(getWritable($username, $entry['room_id']) ||
++        getWritable($entry['create_by'], $entry['room_id']) ||
++        (isset($current) && $auth['users_can_delete_others_registrations'])))
++  {
++    return;
++  }
++
++  $weg = [];
++  foreach (bb_reihe_termine((int) $entry['repeat_id'], $username) as $t)
++  {
++    if (!$t['ich'])
++    {
++      continue;
++    }
++    if (!is_book_admin($t['room_id']) && entry_registration_cancellation_has_closed($t))
++    {
++      continue;
++    }
++    db()->command("DELETE FROM " . _tbl('participants') . " WHERE entry_id=? AND username=?",
++                  [(int) $t['id'], $username]);
++    $weg[] = $t;
++  }
++
++  if (!empty($weg))
++  {
++    bb_reihe_mail($entry, $username, false, $weg, []);
++  }
++}
++
++
++// Sammelmail für die Reihe an die Person und an den Ersteller
++function bb_reihe_mail(array $entry, string $username, bool $angemeldet, array $termine, array $voll) : void
++{
++  global $mail_settings;
++
++  $is_kurs   = !empty($entry['kurs']);
++  $art       = $is_kurs ? 'Kursreihe' : 'Reihe';
++  $room      = get_room_name((int) $entry['room_id']);
++  $person    = auth()->getUser($username);
++  $person_nm = (isset($person) && ($person->display_name !== '')) ? $person->display_name : $username;
++  $leiter    = auth()->getUser($entry['create_by']);
++  $url       = url_base() . multisite('view_entry.php?id=' . $entry['id']);
++  $n         = count($termine);
++
++  $termin_text = array_merge(
++    [$angemeldet ? "Angemeldet für $n Termin" . ($n === 1 ? '' : 'e') . ':'
++                 : "Abgemeldet von $n Termin" . ($n === 1 ? '' : 'en') . ':'],
++    bb_termin_zeilen($termine),
++    empty($voll) ? [] : array_merge(['', 'Schon voll (nicht angemeldet):'], bb_termin_zeilen($voll)),
++    [
++      '',
++      ($is_kurs ? 'Segellehrer:    ' : 'Schiffsführer:  ') . $entry['name'],
++      'Boot:           ' . $room,
++      '',
++      'Buchung ansehen: ' . $url
++    ]
++  );
++
++  if (isset($person) && !empty($person->email))
++  {
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $person->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($leiter) && !empty($leiter->email)) ? $leiter->mailbox() : ''
++      ],
++      ($angemeldet ? 'Angemeldet' : 'Abgemeldet') . ": $art $room ($n Termin" . ($n === 1 ? '' : 'e') . ')',
++      implode(MAIL_EOL, array_merge([$angemeldet ? "Du bist für die $art angemeldet." : "Du bist von der $art abgemeldet.", ''], $termin_text)) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++  }
++
++  if (isset($leiter) && !empty($leiter->email) && (compare_usernames($leiter->username, $username) !== 0))
++  {
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $leiter->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($person) && !empty($person->email)) ? $person->mailbox() : ''
++      ],
++      ($angemeldet ? 'Neue Anmeldung' : 'Abmeldung') . ": $person_nm – $art $room",
++      implode(MAIL_EOL, array_merge([$person_nm . ($angemeldet ? " hat sich für die $art angemeldet." : " hat sich von der $art abgemeldet."), ''], $termin_text)) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++  }
++}
++
++
++// =============================================================================
++// Serienänderung: Anmeldungen übernehmen
++//
++// MRBS legt beim Ändern einer Serie alle Termine neu an; die Anmeldungen
++// würden dabei verloren gehen. Wir merken sie uns vorher und übertragen sie
++// danach auf die neuen Termine – bei gleicher Anzahl der Reihe nach, sonst
++// über das Datum. Jede betroffene Person bekommt eine Mail.
++// =============================================================================
++
++function bb_reihe_vor_aendern(int $id) : ?array
++{
++  $entry = get_entry_by_id($id);
++  if (!isset($entry) || empty($entry['repeat_id']) || empty($entry['allow_registration']))
++  {
++    return null;
++  }
++  $alt = [];
++  $res = db()->query("SELECT * FROM " . _tbl('entry') . " WHERE repeat_id=? ORDER BY start_time", [(int) $entry['repeat_id']]);
++  while (false !== ($row = $res->next_row_keyed()))
++  {
++    row_cast_columns($row, 'entry');
++    $row['registrants'] = get_registrants((int) $row['id'], false) ?? [];
++    $alt[] = $row;
++  }
++  return ['entry' => $entry, 'termine' => $alt];
++}
++
++
++function bb_reihe_nach_aendern(?array $vorher, array $new_details) : void
++{
++  global $mail_settings;
++
++  if (empty($vorher) || empty($new_details))
++  {
++    return;
++  }
++  $hat_anmeldungen = false;
++  foreach ($vorher['termine'] as $t)
++  {
++    if (!empty($t['registrants']))
++    {
++      $hat_anmeldungen = true;
++      break;
++    }
++  }
++  if (!$hat_anmeldungen)
++  {
++    return;
++  }
++
++  // Neue Termine: bei einer Serie ist new_details[0]['id'] die repeat_id
++  $neu = [];
++  foreach ($new_details as $nd)
++  {
++    $res = db()->query("SELECT * FROM " . _tbl('entry') . " WHERE repeat_id=? ORDER BY start_time", [(int) $nd['id']]);
++    while (false !== ($row = $res->next_row_keyed()))
++    {
++      row_cast_columns($row, 'entry');
++      $neu[] = $row;
++    }
++  }
++  if (empty($neu) || empty($neu[0]['allow_registration']))
++  {
++    // Anmeldung abgeschaltet: alle informieren, dass die Termine entfallen
++    $neu = [];
++  }
++
++  $alt = $vorher['termine'];
++  $zuordnung = [];   // Index alt => neuer Termin
++  if (count($alt) === count($neu))
++  {
++    foreach ($alt as $i => $a)
++    {
++      $zuordnung[$i] = $neu[$i];
++    }
++  }
++  else
++  {
++    $nach_datum = [];
++    foreach ($neu as $n)
++    {
++      $nach_datum[date('Ymd', (int) $n['start_time'])] = $n;
++    }
++    foreach ($alt as $i => $a)
++    {
++      $d = date('Ymd', (int) $a['start_time']);
++      if (isset($nach_datum[$d]))
++      {
++        $zuordnung[$i] = $nach_datum[$d];
++      }
++    }
++  }
++
++  // Übertragen und pro Person sammeln
++  $personen = [];
++  foreach ($alt as $i => $a)
++  {
++    foreach ($a['registrants'] as $r)
++    {
++      $u = $r['username'];
++      if (!isset($personen[$u]))
++      {
++        $personen[$u] = ['behalten' => [], 'entfallen' => []];
++      }
++      if (isset($zuordnung[$i]))
++      {
++        $n = $zuordnung[$i];
++        $schon = db()->query1("SELECT COUNT(*) FROM " . _tbl('participants') . " WHERE entry_id=? AND username=?", [(int) $n['id'], $u]);
++        if ($schon == 0)
++        {
++          add_registrant((int) $n['id'], [
++            'username'   => $u,
++            'create_by'  => $r['create_by'] ?? $u,
++            'registered' => (int) ($r['registered'] ?? time())
++          ]);
++        }
++        if ((int) $n['start_time'] > time())
++        {
++          $personen[$u]['behalten'][] = $n;
++        }
++      }
++      elseif ((int) $a['start_time'] > time())
++      {
++        $personen[$u]['entfallen'][] = $a;
++      }
++    }
++  }
++
++  $e      = $vorher['entry'];
++  $art    = !empty($e['kurs']) ? 'Kursreihe' : 'Reihe';
++  $room   = get_room_name((int) (!empty($neu) ? $neu[0]['room_id'] : $e['room_id']));
++  $leiter = auth()->getUser($e['create_by']);
++  foreach ($personen as $u => $p)
++  {
++    if (empty($p['behalten']) && empty($p['entfallen']))
++    {
++      continue;
++    }
++    $person = auth()->getUser($u);
++    if (!isset($person) || empty($person->email))
++    {
++      continue;
++    }
++    $lines = ["Die $art auf $room wurde geändert.", ''];
++    if (!empty($p['behalten']))
++    {
++      $lines[] = 'Du bleibst angemeldet für:';
++      $lines = array_merge($lines, bb_termin_zeilen($p['behalten']), ['']);
++    }
++    if (!empty($p['entfallen']))
++    {
++      $lines[] = 'Diese Termine entfallen:';
++      $lines = array_merge($lines, bb_termin_zeilen($p['entfallen']), ['']);
++    }
++    if (!empty($p['behalten']))
++    {
++      $lines[] = 'Passen dir die Termine nicht, kannst du dich in der Buchung abmelden:';
++      $lines[] = url_base() . multisite('view_entry.php?id=' . $p['behalten'][0]['id']);
++    }
++    MailQueue::add(
++      [
++        'from'     => $mail_settings['from'] ?? null,
++        'to'       => $person->mailbox(),
++        'cc'       => '',
++        'reply_to' => (isset($leiter) && !empty($leiter->email)) ? $leiter->mailbox() : ''
++      ],
++      "Geändert: $art $room",
++      implode(MAIL_EOL, $lines) . MAIL_EOL,
++      null, null, Language::MAIL_CHARSET
++    );
++  }
++}
+diff --git a/web/bb_mitsegeln.php b/web/bb_mitsegeln.php
+new file mode 100644
+index 0000000..ea1d1c2
+--- /dev/null
++++ b/web/bb_mitsegeln.php
+@@ -0,0 +1,186 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Übersicht "Mitsegeln & Kurse"
++//
++// Alle kommenden Buchungen mit Teilnehmer-Anmeldung (Kurse und "Mitsegler
++// willkommen"), mit freien Plätzen und eigener Anmeldung. Ein Klick führt zur
++// Buchung, dort meldet man sich an oder ab.
++// Nur für angemeldete Benutzer. Der Menüpunkt kommt aus Themes/verein/theme.js.
++// =============================================================================
++
++require "defaultincludes.inc";
++
++// Gleiche Berechtigung wie die Suche: angemeldete Benutzer
++checkAuthorised('search.php');
++
++$mrbs_user = session()->getCurrentUser();
++$username  = isset($mrbs_user) ? $mrbs_user->username : '';
++
++$filter = get_form_var('filter', 'string');
++if (!in_array($filter, ['alle', 'kurse', 'mitsegeln', 'meine'], true))
++{
++  $filter = 'alle';
++}
++
++// Eigene Anmeldungen
++$meine = [];
++if ($username !== '')
++{
++  $res = db()->query("SELECT entry_id FROM " . _tbl('participants') . " WHERE username=?", [$username]);
++  while (false !== ($row = $res->next_row_keyed()))
++  {
++    $meine[(int) $row['entry_id']] = true;
++  }
++}
++
++// Kommende Buchungen mit Anmeldung
++$sql = "SELECT E.*, R.room_name, R.area_id, COUNT(P.id) AS n_registered
++          FROM " . _tbl('entry') . " E
++          JOIN " . _tbl('room') . " R ON R.id = E.room_id
++     LEFT JOIN " . _tbl('participants') . " P ON P.entry_id = E.id
++         WHERE (E.allow_registration = 1 OR (? AND E.create_by = ?))
++           AND E.end_time > ?
++           AND R.disabled = 0
++      GROUP BY E.id
++      ORDER BY E.start_time, R.sort_key
++         LIMIT 300";
++// Unter "Meine" auch die eigenen Buchungen ohne Mitsegler
++$res = db()->query($sql, [($filter === 'meine') ? 1 : 0, $username, time()]);
++
++$eintraege = [];
++while (false !== ($row = $res->next_row_keyed()))
++{
++  row_cast_columns($row, 'entry');
++  unpack_status($row);
++
++  if (!is_visible((int) $row['room_id']))
++  {
++    continue;
++  }
++  // Private Buchungen nur für den Ersteller und Admins
++  if (is_private_event($row['private']) && !getWritable($row['create_by'], $row['room_id']))
++  {
++    continue;
++  }
++
++  $row['ist_kurs']   = !empty($row['kurs']);
++  $row['nur_buchung'] = empty($row['allow_registration']);   // eigene Buchung ohne Mitsegler
++  $row['angemeldet'] = isset($meine[(int) $row['id']]);
++  $row['eigene']     = ($username !== '') && (compare_usernames($username, $row['create_by']) === 0);
++  $row['limit']      = !empty($row['registrant_limit_enabled']) ? (int) $row['registrant_limit'] : 0;
++  $row['voll']       = ($row['limit'] > 0) && ((int) $row['n_registered'] >= $row['limit']);
++
++  if (($filter === 'kurse' && !$row['ist_kurs']) ||
++      ($filter === 'mitsegeln' && $row['ist_kurs']) ||
++      ($filter === 'meine' && !$row['angemeldet'] && !$row['eigene']))
++  {
++    continue;
++  }
++  $eintraege[] = $row;
++}
++
++$context = array(
++    'view'      => $view,
++    'view_all'  => $view_all,
++    'year'      => $year,
++    'month'     => $month,
++    'day'       => $day,
++    'area'      => $area,
++    'room'      => $room ?? null
++  );
++
++print_header($context);
++
++echo "<div id=\"bb-mitsegeln\">\n";
++echo "<h2>Mitsegeln &amp; Kurse</h2>\n";
++echo "<p class=\"bb-intro\">Kommende Fahrten, bei denen Mitsegler willkommen sind, und Kurse. " .
++     "Zum An- oder Abmelden die Fahrt öffnen.</p>\n";
++
++// Filter
++echo "<nav class=\"bb-filter\" aria-label=\"Filter\">\n";
++foreach (['alle' => 'Alle', 'kurse' => 'Kurse', 'mitsegeln' => 'Mitsegeln', 'meine' => 'Meine'] as $key => $label)
++{
++  $cls = ($key === $filter) ? ' class="aktiv" aria-current="page"' : '';
++  echo '<a href="' . escape_html(multisite('bb_mitsegeln.php?filter=' . $key)) . "\"$cls>" . escape_html($label) . "</a>\n";
++}
++echo "</nav>\n";
++
++if (empty($eintraege))
++{
++  $leer = [
++    'alle'      => 'Im Moment gibt es keine Fahrten mit freien Plätzen und keine Kurse.',
++    'kurse'     => 'Im Moment sind keine Kurse geplant.',
++    'mitsegeln' => 'Im Moment sucht niemand Mitsegler.',
++    'meine'     => 'Du hast keine kommenden Buchungen und bist für keine Fahrt angemeldet.'
++  ];
++  echo '<p class="bb-leer">' . escape_html($leer[$filter]) . "</p>\n";
++}
++else
++{
++  echo "<ul class=\"bb-fahrten\">\n";
++  $letzter_tag = '';
++  foreach ($eintraege as $e)
++  {
++    $tag = datetime_format(['pattern' => 'EEEE, d. MMMM'], (int) $e['start_time']);
++    if ($tag !== $letzter_tag)
++    {
++      echo '<li class="bb-tag">' . escape_html($tag) . "</li>\n";
++      $letzter_tag = $tag;
++    }
++
++    $von = datetime_format(['pattern' => 'HH:mm'], (int) $e['start_time']);
++    $bis = datetime_format(['pattern' => 'HH:mm'], (int) $e['end_time']);
++
++    $klassen = ['bb-fahrt', $e['ist_kurs'] ? 'kurs' : ($e['nur_buchung'] ? 'buchung' : 'mitsegeln')];
++    if ($e['voll'])       { $klassen[] = 'voll'; }
++    if ($e['angemeldet']) { $klassen[] = 'angemeldet'; }
++
++    $plaetze = $e['nur_buchung'] ? '' : ($e['limit'] > 0
++      ? ((int) $e['n_registered']) . ' / ' . $e['limit']
++      : ((int) $e['n_registered']) . ' angemeldet');
++
++    if ($e['nur_buchung'])
++    {
++      $status = 'Deine Buchung';
++    }
++    elseif ($e['angemeldet'])
++    {
++      $status = 'Du bist angemeldet';
++    }
++    elseif ($e['eigene'])
++    {
++      $status = 'Deine Fahrt';
++    }
++    elseif ($e['voll'])
++    {
++      $status = 'Voll';
++    }
++    else
++    {
++      $frei = ($e['limit'] > 0) ? ($e['limit'] - (int) $e['n_registered']) : null;
++      $status = isset($frei) ? (($frei === 1) ? '1 Platz frei' : "$frei Plätze frei") : 'Plätze frei';
++    }
++
++    $url = multisite('view_entry.php?id=' . (int) $e['id']);
++    echo '<li class="' . implode(' ', $klassen) . "\">\n";
++    echo '<a href="' . escape_html($url) . "\">\n";
++    echo '<span class="zeit">' . escape_html("$von – $bis") . "</span>\n";
++    echo '<span class="haupt">';
++    echo '<span class="marke">' . ($e['ist_kurs'] ? 'Kurs' : ($e['nur_buchung'] ? 'Buchung' : 'Mitsegeln')) . '</span> ';
++    echo '<span class="boot">' . escape_html($e['room_name']) . '</span>';
++    echo '<span class="leitung">' . ($e['ist_kurs'] ? 'Segellehrer' : 'Schiffsführer') . ': ' .
++         escape_html($e['name']) . '</span>';
++    echo "</span>\n";
++    echo '<span class="plaetze">' . escape_html($plaetze) . '</span>';
++    echo '<span class="status">' . escape_html($status) . "</span>\n";
++    echo "</a>\n</li>\n";
++  }
++  echo "</ul>\n";
++}
++
++echo "</div>\n";
++
++print_footer();
+diff --git a/web/view_entry.php b/web/view_entry.php
+index 815b9bd..7deb0df 100644
+--- a/web/view_entry.php
++++ b/web/view_entry.php
+@@ -300,9 +300,25 @@ function generate_event_registration(array $row, ?string $previous_page=null) :
+   // Display it as a table because in the future we might want to (a) add more columns,
+   // eg date and time of registration and (b) use DataTables to make the list searchable
+   // and exportable.
++  // Bootsbuchung-Anpassung: Die volle Liste (mit Export, Löschen anderer, E-Mail-Links)
++  // nur für den Ersteller und Admins. Andere Mitglieder sehen - falls
++  // eingeschaltet - nur die Namen.
++  $bb_is_owner = $can_register_others || getWritable($row['create_by'], $row['room_id']);
+   if (($n_registered > 0) && $can_see_others)
+   {
+-    generate_registrant_table($row, $previous_page);
++    if ($bb_is_owner)
++    {
++      generate_registrant_table($row, $previous_page);
++    }
++    else
++    {
++      echo "<ul class=\"bb-registrant-names\">\n";
++      foreach (auth()->getRegistrantsDisplayNames($row) as $bb_name)
++      {
++        echo '<li>' . escape_html($bb_name) . "</li>\n";
++      }
++      echo "</ul>\n";
++    }
+   }
+ 
+   // Display registration information and buttons for this user
+@@ -326,7 +342,8 @@ function generate_event_registration(array $row, ?string $previous_page=null) :
+       }
+       // If they can see others they'll have a delete button against their name.  Otherwise
+       // we'll need to provide one for them.
+-      if (!$can_see_others)
++      // Bootsbuchung-Anpassung: ohne volle Liste (siehe oben) eigener Abmelde-Knopf
++      if (!$can_see_others || !$bb_is_owner)
+       {
+         generate_cancel_registration_button(
+           $row,
+@@ -337,6 +354,11 @@ function generate_event_registration(array $row, ?string $previous_page=null) :
+         );
+       }
+     }
++    // Bootsbuchung-Anpassung: Wer die Buchung angelegt hat, kann sich nicht selbst anmelden
++    elseif (!$can_register_others && (compare_usernames($mrbs_user->username, $row['create_by']) === 0))
++    {
++      echo '<p>' . escape_html('Das ist deine Buchung – andere Mitglieder können sich hier eintragen.') . "</p>\n";
++    }
+     else
+     {
+       if (empty($row['registrant_limit_enabled']) ||
+@@ -349,6 +371,10 @@ function generate_event_registration(array $row, ?string $previous_page=null) :
+         echo '<p>' . escape_html(get_vocab('event_full')) . "</p>\n";
+       }
+     }
++
++    // Bootsbuchung-Anpassung: Kursreihe – für alle Termine an- bzw. abmelden
++    require_once 'bb_kurs.inc';
++    bb_reihe_block($row, $previous_page, $can_register_others);
+   }
+ 
+   echo "</div>\n";
