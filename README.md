@@ -156,6 +156,13 @@ stehen als `$vocab_override` in der `config.inc.php`.
 
 Getestet mit MRBS **1.12.2**.
 
+## Wie ist das entstanden?
+
+Die Anforderungen, Entscheidungen und Tests stammen aus dem Alltag eines
+Segelvereins. Den Code hat überwiegend die KI **Claude** (Anthropic)
+geschrieben – im Dialog und Schritt für Schritt auf einem Testsystem geprüft,
+bevor er in den echten Vereinsbetrieb ging.
+
 ## Lizenz und Dank
 
 Dieses Projekt steht wie MRBS unter der **GNU General Public License, Version 2**
