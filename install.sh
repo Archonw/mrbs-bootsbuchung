@@ -64,11 +64,23 @@ command -v apt-get >/dev/null || die "Dieses Skript unterstützt Debian/Ubuntu (
 echo "${B}Bootsbuchung – Installation${N}"
 echo "Basiert auf MRBS (Meeting Room Booking System), GPL v2."
 
-if [ -f "$INSTALL_DIR/.env" ] && [ -f "$INSTALL_DIR/config/config.inc.php" ]; then
+# Fertige Installation: Merker .installiert (ältere Installationen haben ihn
+# noch nicht, dort zählt die Cron-Datei, die install.sh als Letztes anlegt)
+if [ -f "$INSTALL_DIR/.installiert" ] || \
+   { [ -f "$INSTALL_DIR/.env" ] && [ -f "$INSTALL_DIR/config/config.inc.php" ] && [ -f /etc/cron.d/bootsbuchung ]; }; then
   warn "In $INSTALL_DIR ist bereits eine Installation."
   info "Aktualisieren:      sudo $INSTALL_DIR/update.sh"
   info "Neu installieren:   vorher den Ordner $INSTALL_DIR entfernen (löscht alle Buchungen!)"
   exit 0
+fi
+
+# Abgebrochener Versuch: Die Datenbank kann schon mit den damaligen
+# Passwörtern angelegt sein – also dieselben wieder verwenden
+OLD_DB_PASSWORD= OLD_DB_ROOT_PASSWORD=
+if [ -f "$INSTALL_DIR/.env" ]; then
+  OLD_DB_PASSWORD=$(grep -E '^DB_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2- || true)
+  OLD_DB_ROOT_PASSWORD=$(grep -E '^DB_ROOT_PASSWORD=' "$INSTALL_DIR/.env" | cut -d= -f2- || true)
+  warn "Ein früherer Installationsversuch wurde nicht fertig – er wird fortgesetzt."
 fi
 
 step "Pakete installieren (git, curl)"
@@ -100,6 +112,9 @@ if [ -n "$SRC_DIR" ] && [ -f "$SRC_DIR/docker-compose.yml" ] && [ -d "$SRC_DIR/p
     mkdir -p "$INSTALL_DIR"
     cp -a "$SRC_DIR/." "$INSTALL_DIR/"
   fi
+elif [ -d "$INSTALL_DIR/.git" ]; then
+  step "Programmdateien in $INSTALL_DIR aktualisieren"
+  git -C "$INSTALL_DIR" pull -q --ff-only
 else
   step "Lade Programmdateien nach $INSTALL_DIR"
   git clone -q "$REPO_URL" "$INSTALL_DIR"
@@ -169,8 +184,8 @@ DATENSCHUTZ=$(ask "Link zur Datenschutzerklärung (leer = keiner)" "")
 
 # --- Dateien anlegen ---------------------------------------------------------
 step "Einstellungen speichern"
-DB_PASSWORD=$(randpw)
-DB_ROOT_PASSWORD=$(randpw)
+DB_PASSWORD=${OLD_DB_PASSWORD:-$(randpw)}
+DB_ROOT_PASSWORD=${OLD_DB_ROOT_PASSWORD:-$(randpw)}
 mkdir -p config data/mysql data/initdb
 
 umask 077
@@ -331,7 +346,9 @@ step "Admin-Konto anlegen"
 HASH=$(docker exec -e PW="$ADMIN_PW" mrbs php -r 'echo password_hash(getenv("PW"), PASSWORD_DEFAULT);')
 docker exec -i mrbs_db sh -c 'mariadb -h127.0.0.1 -umrbs -p"$MARIADB_PASSWORD" mrbs' <<EOF
 INSERT INTO mrbs_users (level, name, display_name, email, password_hash, segellehrer)
-VALUES (2, $(sql_str "$ADMIN_USER"), $(sql_str "$ADMIN_NAME"), $(sql_str "$ADMIN_MAIL"), $(sql_str "$HASH"), 1);
+VALUES (2, $(sql_str "$ADMIN_USER"), $(sql_str "$ADMIN_NAME"), $(sql_str "$ADMIN_MAIL"), $(sql_str "$HASH"), 1)
+ON DUPLICATE KEY UPDATE level = 2, display_name = VALUES(display_name), email = VALUES(email),
+                        password_hash = VALUES(password_hash), segellehrer = 1;
 EOF
 
 step "Bereich \"Boote\" anlegen"
@@ -351,6 +368,7 @@ chmod +x maintenance/*.sh update.sh
   [ "$MAIL_ON" = 1 ] && echo "0 18 * * * root $INSTALL_DIR/maintenance/kurs-erinnerung.sh >> /var/log/bootsbuchung.log 2>&1"
 } > /etc/cron.d/bootsbuchung
 chmod 644 /etc/cron.d/bootsbuchung
+date '+%F %T' > .installiert
 
 # --- Fertig ------------------------------------------------------------------
 IP=$(hostname -I 2>/dev/null | awk '{print $1}')
