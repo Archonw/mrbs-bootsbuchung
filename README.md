@@ -109,7 +109,7 @@ Einrichtung des Proxy Managers (dauert 2 Minuten):
 |---|---|
 | Programmordner | `/opt/bootsbuchung` |
 | Einstellungen | `/opt/bootsbuchung/config/config.inc.php` – danach `cd /opt/bootsbuchung && docker compose restart mrbs` |
-| Aktualisieren | `sudo /opt/bootsbuchung/update.sh` |
+| Aktualisieren (auch PHP-Sicherheitsupdates) | `sudo /opt/bootsbuchung/update.sh` |
 | Datensicherung | jede Nacht nach `/opt/bootsbuchung/data/sicherung/` (14 Tage) |
 | Protokoll | `/var/log/bootsbuchung.log` |
 | Mail testen | `docker exec -i mrbs php < /opt/bootsbuchung/tools/mailtest.php` |

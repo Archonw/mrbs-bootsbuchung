@@ -73,7 +73,8 @@ cp "$BUILD_DIR/tables.my.sql" data/initdb/010-tables.sql
 
 echo "==> Docker-Image bauen"
 docker image tag bootsbuchung-mrbs:latest bootsbuchung-mrbs:vorher 2>/dev/null || true
-docker build -q -t bootsbuchung-mrbs:latest -t "bootsbuchung-mrbs:$VERSION" "$BUILD_DIR" >/dev/null
+# --pull: immer das aktuelle PHP-Image holen, damit PHP-Sicherheitsupdates mitkommen
+docker build --pull -q -t bootsbuchung-mrbs:latest -t "bootsbuchung-mrbs:$VERSION" "$BUILD_DIR" >/dev/null
 
 # Gebaute Version merken
 if [ -f .env ]; then
@@ -96,5 +97,5 @@ for f in sql/*.sql; do
   docker exec -i mrbs_db sh -c 'mariadb -h127.0.0.1 -umrbs -p"$MARIADB_PASSWORD" mrbs' < "$f"
 done
 
-echo "==> Fertig: MRBS $VERSION läuft."
+echo "==> Fertig: MRBS $VERSION läuft (PHP $(docker exec mrbs php -r 'echo PHP_VERSION;' 2>/dev/null || echo unbekannt))."
 echo "    Zurück zur vorigen Version:  docker image tag bootsbuchung-mrbs:vorher bootsbuchung-mrbs:latest && docker compose up -d"
