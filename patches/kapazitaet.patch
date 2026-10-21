@@ -24,9 +24,9 @@
 +      if (!$registrant_limit_enabled || ($registrant_limit > $max_registrants))
 +      {
 +        $room_name = escape_html($room_row['room_name']);
-+        invalid_booking("Die maximale Teilnehmeranzahl für <b>$room_name</b> darf höchstens " .
++        invalid_booking("Die Zahl der Plätze für <b>$room_name</b> darf höchstens " .
 +                        "$max_registrants betragen (Kapazität: $capacity). " .
-+                        "Bitte „Teilnehmerzahl begrenzen“ aktivieren und einen passenden Wert eintragen.");
++                        "Bitte „Plätze begrenzen“ aktivieren und einen passenden Wert eintragen.");
 +      }
 +    }
 +  }

@@ -164,7 +164,7 @@
    - Obergrenze am Zahlenfeld: der Pfeil nach oben stoppt dort
    - zu große Eingaben werden auf die Obergrenze gesetzt
    - Hinweis "max. 5 (Kapazität 6, 1 Platz für den Schiffsführer)"
-   - bei Anmeldung + Boot mit Kapazität wird "Teilnehmerzahl begrenzen"
+   - bei Anmeldung + Boot mit Kapazität wird "Plätze begrenzen"
      automatisch angehakt (der Patch verlangt das ohnehin)
    Mehrere Boote ausgewählt: es gilt das kleinste.
    Klappt das Laden nicht, bleibt das Formular wie es ist – der Patch
