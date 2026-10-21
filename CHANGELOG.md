@@ -6,6 +6,16 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-10-21 – Installation nach Abbruch fortsetzen
+
+Bricht `install.sh` mittendrin ab (z. B. Netzwerkfehler beim Bauen), setzt ein
+erneuter Aufruf die Installation jetzt fort. Bisher meldete das Skript dann
+„bereits eine Installation“ (ohne Admin-Konto und Wartung) oder scheiterte
+beim Herunterladen, weil der Ordner schon da war. Eine fertige Installation
+wird weiterhin erkannt und nicht angefasst.
+
+Für bestehende Installationen ist nichts zu tun.
+
 ## 2026-10-15 – Begriffe in der Verwaltung
 
 In der Verwaltung („Boote“) heißt es jetzt „Boot hinzufügen“, „Boot bearbeiten“,
