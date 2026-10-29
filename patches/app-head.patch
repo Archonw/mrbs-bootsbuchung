@@ -1,0 +1,16 @@
+diff --git a/web/style.inc b/web/style.inc
+index cd3c5d7..12cbd21 100644
+--- a/web/style.inc
++++ b/web/style.inc
+@@ -63,3 +63,11 @@ if (isset($custom_css_url))
+ {
+   echo link_html($custom_css_url, true);
+ }
++
++// Bootsbuchung-Anpassung: zusätzliche Zeilen im <head> aus dem Theme (App-Manifest,
++// Icons, Service Worker). Fehlt die Datei, passiert nichts.
++$theme_head = "Themes/$theme/head.inc";
++if (is_readable($theme_head))
++{
++  include $theme_head;
++}

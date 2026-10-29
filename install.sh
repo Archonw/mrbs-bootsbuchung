@@ -13,7 +13,7 @@
 #   1. Docker wird installiert (falls noch nicht da)
 #   2. Fragen: Vereinsname, Adresse, Proxy, Admin-Konto, Mailserver
 #   3. MRBS wird mit allen Anpassungen gebaut und gestartet
-#   4. Datenbank, Admin-Konto und nächtliche Wartung werden eingerichtet
+#   4. Datenbank, Admin-Konto, Push-Schlüssel und nächtliche Wartung werden eingerichtet
 #
 # Erneut ausführen ist harmlos: Eine bestehende Installation wird erkannt und
 # nicht überschrieben (dafür gibt es update.sh).
@@ -225,6 +225,9 @@ namespace MRBS;
 \$auth['session'] = 'php';
 \$auth['deny_public_access'] = true;     // nur angemeldete Mitglieder sehen Buchungen
 \$url_base = $(php_str "$URL/");
+// Angemeldet bleiben, auch wenn die Buchung aus der Android-App, einem Link
+// in einer Mail oder einer Push-Nachricht geöffnet wird
+\$cookie_samesite_lax = true;
 
 // --- Aussehen ---
 \$mrbs_company = $(php_str "$VEREIN");
@@ -234,6 +237,9 @@ namespace MRBS;
 \$custom_js_url = 'Themes/verein/theme.js';
 \$bb_impressum_url = $(php_str "$IMPRESSUM");
 \$bb_datenschutz_url = $(php_str "$DATENSCHUTZ");
+// App (Startbildschirm, Android-App): Name und Farbe – ohne Angabe
+// "Bootsbuchung <Vereinsname>", Kurzname "Boote", Farbe wie die Kopfzeile
+// \$bb_app = ['name' => 'Bootsbuchung Mein Verein', 'kurzname' => 'Boote', 'farbe' => '#0c0e0d'];
 
 \$default_language_tokens = 'de';
 \$disable_automatic_language_changing = true;
@@ -293,6 +299,11 @@ unset(\$booking_types);                  // keine Buchungstypen
 \$vocab_override['de']['registration_level_unlimited_with_names'] = ' · %1\$d: %2\$s';
 \$vocab_override['de']['confirm_edit_series'] = 'Für diese Reihe sind Mitglieder angemeldet. Ihre Anmeldungen werden auf die geänderten Termine übertragen, sie bekommen eine Mail. Fortfahren?';
 
+// --- Push-Benachrichtigungen (Schlüssel \$bb_push steht ganz unten) ---
+// Push läuft über den Mailversand: Jede Mail an ein Mitglied kommt zusätzlich
+// als Push-Nachricht. Ohne Mailversand gibt es deshalb auch keine Push-Nachrichten.
+\$vocab_override['de']['users.nur_push'] = 'Nur Push, keine Mails';
+
 // --- Mail ---
 // Bootswart-Meldungen gehen an die E-Mail-Adresse des Bereichsadministrators
 // (Bereich bearbeiten) und an die des Boots (Boot bearbeiten = Boot-Pate).
@@ -329,6 +340,13 @@ step "MRBS $MRBS_VERSION mit allen Anpassungen bauen (dauert einige Minuten)"
 ./update.sh --nur-bauen
 
 cp sql/kursbuchung.sql data/initdb/020-kursbuchung.sql
+cp sql/push.sql data/initdb/030-push.sql
+
+step "Schlüssel für Push-Benachrichtigungen erzeugen"
+# Kontakt für die Push-Dienste: die Admin-Mail, sonst die Adresse der Buchung
+if [ -n "$ADMIN_MAIL" ]; then PUSH_SUBJECT="mailto:$ADMIN_MAIL"; else PUSH_SUBJECT="$URL"; fi
+{ echo; docker run --rm -i -e BB_PUSH_SUBJECT="$PUSH_SUBJECT" bootsbuchung-mrbs:latest php < tools/push-schluessel.php; } \
+  >> config/config.inc.php
 
 step "Starten"
 docker compose up -d

@@ -22,7 +22,15 @@ The user interface is German.*
 **Boote buchen**
 - Mitglieder buchen Boote im Tages-, Wochen- oder Monatsplan
 - Hell/Dunkel automatisch nach Geräteeinstellung oder per Knopf
-- Handy-Ansicht mit Menüknopf und gut erkennbaren Buchungen
+- Handy-Ansicht wie eine App: Navigation unten, Tagesplan als Karten je Boot,
+  „+“-Knopf für neue Buchungen, übersichtliches Buchungsformular
+
+**App und Push-Benachrichtigungen**
+- Als App aufs Handy: über den Browser („App installieren“ / „Zum
+  Home-Bildschirm“) oder mit der Android-App
+  [Bootsbuchung für Vereine](https://github.com/Archonw/bootsbuchung-app)
+- Push-Nachrichten statt (oder zusätzlich zu) Mails – jedes Mitglied
+  entscheidet selbst auf der Seite „Benachrichtigungen“
 
 **Mitsegler willkommen**
 - Wer nicht allein segeln will, hakt „Mitsegler willkommen“ an – andere
@@ -53,6 +61,8 @@ The user interface is German.*
 | ![Dunkle Ansicht](docs/tagesansicht-dunkel.png) | ![Teilnehmerliste](docs/teilnehmerliste.png) |
 
 ![Handy](docs/handy.png)
+
+![Handy-Ansicht wie eine App: Tagesplan als Karten, Buchungsformular](docs/handy-app.png)
 
 ## Installation
 
@@ -127,6 +137,59 @@ Mailtest prüfen. Für die Erinnerung am Vortag in `/etc/cron.d/bootsbuchung`
 die Zeile mit `kurs-erinnerung.sh` ergänzen:
 `0 18 * * * root /opt/bootsbuchung/maintenance/kurs-erinnerung.sh >> /var/log/bootsbuchung.log 2>&1`
 
+## App und Push
+
+Die Bootsbuchung ist gleichzeitig eine App. Voraussetzung ist **HTTPS**
+(Variante 1 oder 2 der Installation) – ohne HTTPS bleibt sie eine normale
+Webseite.
+
+**Auf das Handy bringen** – Mitglieder haben zwei Wege:
+- **Android-App „Bootsbuchung für Vereine“**
+  ([Quellcode](https://github.com/Archonw/bootsbuchung-app)): installieren,
+  beim ersten Start die Adresse der Buchung eingeben (z. B.
+  `buchung.mein-verein.de`), fertig. Die App zeigt die Buchung im Vollbild.
+  Dafür liefert die Buchung die Datei `/.well-known/assetlinks.json` mit dem
+  Fingerabdruck der App aus – sie kommt mit jedem `update.sh` aktuell vom
+  Projekt, du musst nichts tun.
+- **Ohne App:** die Buchung im Browser öffnen, dann in Chrome
+  „App installieren“, auf dem iPhone in Safari „Teilen → Zum Home-Bildschirm“.
+
+**Push-Benachrichtigungen:** Jedes Mitglied schaltet Push unter
+**Benachrichtigungen** (Handy: unten „Hinweise“) für sein Gerät ein. Danach
+kommt jede Mail der Buchung (Anmeldungen, Absagen, Erinnerungen,
+Bootswart-Meldungen) zusätzlich sofort als Nachricht aufs Handy. Wer mag,
+hakt „Keine Mails mehr“ an – die Mail kommt dann nur noch, wenn die
+Push-Nachricht nicht zugestellt werden konnte. Push braucht den
+**Mailversand** (siehe „Mail später einrichten“): ohne Mail auch kein Push.
+
+Den Schlüssel für Push erzeugen `install.sh` bzw. `update.sh` selbst und
+schreiben ihn als `$bb_push` in die `config.inc.php`. Er bleibt danach immer
+gleich. **Nicht weitergeben und nicht austauschen** – mit einem neuen
+Schlüssel müssten alle Mitglieder Push neu einschalten. Von Hand erzeugen
+(nur falls er fehlt): `docker exec -i mrbs php < /opt/bootsbuchung/tools/push-schluessel.php`
+und die Ausgabe in die `config.inc.php` kopieren.
+
+**Angemeldet bleiben:** Damit Mitglieder in der App und beim Antippen einer
+Push-Nachricht angemeldet bleiben, steht in der `config.inc.php`
+`$cookie_samesite_lax = true;` (trägt `update.sh` bei älteren Installationen nach).
+
+**Name und Farbe der App** (freiwillig, in der `config.inc.php`):
+
+```php
+$bb_app = [
+  'name'     => 'Bootsbuchung Mein Segelverein',  // Vorgabe: "Bootsbuchung " + Vereinsname
+  'kurzname' => 'Boote',                          // Name unter dem App-Symbol
+  'farbe'    => '#0c0e0d',                        // Statusleiste, Startbild
+];
+```
+
+Eigene App-Symbole: die PNG-Dateien in `theme/verein/app/` durch gleich große
+ersetzen (`icon-maskable-512.png` mit etwas Rand, weil Android es rund oder
+eckig zuschneidet).
+
+**Zum Prüfen** (Chrome am PC): F12 → „Application“ → „Manifest“ zeigt Name
+und Symbole, unter „Service workers“ ist `sw.php` aktiviert.
+
 ## Wie ist das aufgebaut?
 
 MRBS selbst liegt **nicht** in diesem Repo. `update.sh` holt die gewünschte
@@ -142,10 +205,15 @@ patches/              Änderungen am MRBS-Code
   bootswart-meldung     Meldung an Bootswart und Boot-Paten
   kapazitaet            Teilnehmerzahl an die Bootsgröße binden
   kurs                  Kurse, Mitsegler, Kursreihen, Mails, Seite „Mitsegeln & Kurse“, Erinnerung
-theme/verein/         Aussehen (hell/dunkel, Handy), Formular-Hilfen, Teilnehmerliste
-sql/                  zusätzliche Datenbankfelder (Segellehrer, Kurs)
+  app-head              bindet theme/verein/head.inc ein (App-Manifest, Symbole, Service Worker)
+  app-assetlinks        /.well-known/assetlinks.json für die Android-App
+  push                  Push-Benachrichtigungen, Seite „Benachrichtigungen“
+theme/verein/         Aussehen (hell/dunkel, Handy-Ansicht wie eine App), Formular-Hilfen, Teilnehmerliste
+  app/                  App-Manifest, Symbole, Service Worker, Offline-Seite
+sql/                  zusätzliche Datenbankfelder (Segellehrer, Kurs, Push)
 maintenance/          nächtliche Wartung: Sicherung, Sitzungen aufräumen, Erinnerung
 tools/mailtest.php    prüft den Mailversand
+tools/push-schluessel.php  erzeugt den Schlüssel für Push
 ```
 
 **Anpassen:** Farben stehen oben in `theme/verein/theme.css` als Variablen

@@ -6,6 +6,30 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-10-30 – App fürs Handy und Push-Benachrichtigungen
+
+- **Als App installierbar:** Die Buchung bringt ein App-Manifest, Symbole und
+  eine Offline-Seite mit. Am Handy „App installieren“ bzw. „Zum
+  Home-Bildschirm“ – oder die Android-App
+  [Bootsbuchung für Vereine](https://github.com/Archonw/bootsbuchung-app)
+  nehmen und dort die Adresse der Buchung eintragen.
+- **Push-Benachrichtigungen:** Neue Seite „Benachrichtigungen“. Wer Push
+  einschaltet, bekommt jede Mail der Buchung zusätzlich sofort aufs Handy –
+  auf Wunsch nur noch Push statt Mail. Braucht eingeschalteten Mailversand.
+- **Handy-Ansicht wie eine App:** Navigation unten (Plan, Mitsegeln, Meine,
+  Hinweise, Mehr), „+“-Knopf für eine neue Buchung, Tagesplan als Karten je
+  Boot (umschaltbar auf das Raster), aufgeräumtes Buchungsformular mit fester
+  Speichern-Leiste, großer Knopf „Anmelden“ für nicht angemeldete Besucher,
+  Hinweis, wenn das Handy versehentlich die Desktop-Ansicht zeigt.
+- `/.well-known/assetlinks.json` für die Android-App (Vollbild ohne Adressleiste).
+
+Für bestehende Installationen ist nichts von Hand zu tun: `update.sh` legt die
+neue Tabelle an, erzeugt den Push-Schlüssel und ergänzt in der
+`config.inc.php` die nötigen Zeilen (`$cookie_samesite_lax = true;`, damit
+man in der App angemeldet bleibt, den Push-Schlüssel `$bb_push` und die
+Beschriftung „Nur Push, keine Mails“). Name und Farbe der App lassen sich mit
+`$bb_app` ändern (siehe README, Abschnitt „App und Push“).
+
 ## 2026-10-21 – Installation nach Abbruch fortsetzen
 
 Bricht `install.sh` mittendrin ab (z. B. Netzwerkfehler beim Bauen), setzt ein

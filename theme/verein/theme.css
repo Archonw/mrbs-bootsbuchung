@@ -768,7 +768,7 @@ legend { font-weight: 700; }
    verhalten sich also unverändert. Zum Wiederanzeigen diese Regel löschen. */
 #registration > div:has([name="registration_opens_enabled"]),
 #registration > div:has([name="registration_closes_enabled"]) {
-  display: none;
+  display: none !important;
 }
 
 /* Hinweis neben der Teilnehmerzahl (von theme.js) */
@@ -1199,3 +1199,359 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
 #bb-mitsegeln .bb-fahrt.buchung > a { box-shadow: var(--bb-shadow), inset 4px 0 0 var(--bb-streifen); }
 #bb-mitsegeln .buchung .marke { color: var(--bb-muted); box-shadow: inset 0 0 0 1px var(--bb-border); }
 #bb-mitsegeln .buchung .status { color: var(--bb-muted); }
+
+/* ===== Benachrichtigungen (bb_benachrichtigungen.php) ===== */
+#bb-push { max-width: 40rem; margin: 0 auto; padding: 1rem 0 2rem; }
+#bb-push h2 { margin: 0 0 0.25rem; }
+#bb-push .bb-intro { margin: 0 0 1rem; color: var(--bb-muted); }
+#bb-push .bb-push-karte {
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+}
+#bb-push h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+#bb-push .bb-push-status { margin: 0 0 0.75rem; }
+#bb-push .bb-push-knoepfe { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
+#bb-push button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.6rem 1.1rem;
+  min-height: 44px;
+  border-radius: var(--bb-radius-sm);
+  border: 1px solid var(--bb-accent);
+  background: var(--bb-accent);
+  color: var(--bb-on-accent);
+  cursor: pointer;
+}
+#bb-push button.zweitrangig { background: transparent; color: var(--bb-text); border-color: var(--bb-border); }
+#bb-push button:disabled { opacity: 0.6; cursor: wait; }
+#bb-push button:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+#bb-push .bb-push-option::after { content: none; }   /* MRBS hängt sonst ":" an */
+#bb-push .bb-push-option { display: flex; gap: 0.6rem; align-items: flex-start; cursor: pointer; }
+#bb-push .bb-push-option input { margin-top: 0.25rem; width: 1.1rem; height: 1.1rem; accent-color: var(--bb-accent); }
+#bb-push .bb-push-hinweis { margin: 0.75rem 0 0; color: var(--bb-muted); font-size: 0.9rem; }
+
+/* ---------- 14. Handy: App-Navigation unten (theme.js) -------------------- */
+.bb-appnav, .bb-fab { display: none; }
+
+@media (max-width: 700px) {
+  .bb-appnav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
+    background: var(--bb-surface);
+    border-top: 1px solid var(--bb-border);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+  }
+  .bb-appnav > a,
+  .bb-appnav > button {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-height: 56px;
+    padding: 0.35rem 0 0.25rem;
+    border: 0;
+    background: none;
+    color: var(--bb-muted) !important;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .bb-appnav svg {
+    width: 44px;
+    height: 28px;
+    padding: 2px 10px;
+    border-radius: 999px;
+    box-sizing: border-box;
+  }
+  .bb-appnav [aria-current="page"] { color: var(--bb-text) !important; }
+  .bb-appnav [aria-current="page"] svg { background: var(--bb-accent-tint); color: var(--bb-accent); }
+  .bb-appnav > *:focus-visible { outline: none; }
+  .bb-appnav > *:focus-visible svg { box-shadow: 0 0 0 3px var(--bb-focus); }
+
+  /* Nicht angemeldet: ein großer Knopf statt der Leiste */
+  .bb-appnav-gast { padding: 0.6rem 0.9rem calc(0.6rem + env(safe-area-inset-bottom)); }
+  .bb-appnav-gast > button.bb-anmelden {
+    flex-direction: row;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 52px;
+    padding: 0 1rem;
+    border-radius: 14px;
+    background: var(--bb-accent);
+    color: var(--bb-on-accent) !important;
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  .bb-appnav-gast svg { width: 24px; height: 24px; padding: 0; }
+
+  /* Platz für die Leiste, Impressum darüber */
+  html.bb-hat-appnav body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  html.bb-hat-appnav .bb-footer { bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+  .bb-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 16px;
+    bottom: calc(84px + env(safe-area-inset-bottom));
+    z-index: 51;
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: var(--bb-accent);
+    color: var(--bb-on-accent) !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  }
+  .bb-fab svg { width: 28px; height: 28px; }
+  /* Mit "+" rutscht das Impressum nach links, damit es nicht verdeckt wird */
+  html.bb-hat-appnav body:has(.bb-fab) .bb-footer { right: auto; left: 12px; }
+}
+
+/* ---------- 15. Handy: Tagesplan als Liste (theme.js) --------------------- */
+.bb-tagesliste, .bb-ansicht-umschalter { display: none; }
+
+@media (max-width: 700px) {
+  .bb-ansicht-umschalter {
+    display: flex;
+    width: fit-content;
+    margin: 0 0 0.75rem;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--bb-surface-2);
+    border: 1px solid var(--bb-border);
+  }
+  .contents .bb-ansicht-umschalter button {
+    min-height: 34px;
+    padding: 0 1rem;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 999px !important;
+    background: transparent !important;
+    color: var(--bb-muted) !important;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  /* !important: die allgemeine Knopf-Regel (.contents button:not(...)) ist spezifischer */
+  .contents .bb-ansicht-umschalter button[aria-pressed="true"] { background: var(--bb-surface) !important; color: var(--bb-text) !important; box-shadow: var(--bb-shadow) !important; }
+
+  /* Liste statt Tabelle (Standard), Tabelle über "Raster" */
+  html:not(.bb-tagesraster) .bb-tagesliste { display: flex; }
+  html:not(.bb-tagesraster) .table_container:has(#day_main) { display: none; }
+
+  .bb-tagesliste { flex-direction: column; gap: 0.75rem; }
+  .bb-bootkarte {
+    padding: 0.85rem 1rem;
+    border-radius: var(--bb-radius);
+    background: var(--bb-surface);
+    box-shadow: var(--bb-shadow);
+  }
+  .bb-bootkarte > header { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .bb-bootname { font-size: 1.05rem; font-weight: 700; color: var(--bb-text) !important; text-decoration: none; }
+  .bb-kapazitaet { margin-left: auto; font-size: 0.8rem; color: var(--bb-muted); }
+  .bb-bootkarte ul { list-style: none; margin: 0; padding: 0; }
+  .bb-bootkarte li + li { border-top: 1px solid var(--bb-border-soft); }
+  .bb-bootkarte li > a {
+    display: grid;
+    grid-template-columns: 6.2rem 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    padding: 0.35rem 0 0.35rem 0.6rem;
+    color: var(--bb-text) !important;
+    text-decoration: none;
+    box-shadow: inset 3px 0 0 var(--bb-streifen);
+  }
+  .bb-bootkarte li > a.mitsegeln { box-shadow: inset 3px 0 0 var(--bb-mitsegeln-strong); }
+  .bb-bootkarte li > a.kurs { box-shadow: inset 3px 0 0 var(--bb-kurs-strong); }
+  .bb-bootkarte .zeit { font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+  .bb-bootkarte .wer { min-width: 0; overflow-wrap: anywhere; }
+  .bb-bootkarte .marke {
+    display: inline-block;
+    margin-right: 0.4em;
+    padding: 0 0.45em;
+    border-radius: 999px;
+    font-size: 0.72em;
+    font-weight: 700;
+    line-height: 1.6;
+    color: var(--bb-mitsegeln-strong);
+    box-shadow: inset 0 0 0 1px var(--bb-mitsegeln-strong);
+  }
+  .bb-bootkarte .kurs .marke { background: var(--bb-kurs-strong); color: #fff; box-shadow: none; }
+  .bb-bootkarte .plaetze { font-size: 0.85rem; font-weight: 600; color: var(--bb-muted); font-variant-numeric: tabular-nums; }
+  .bb-frei { margin: 0; color: var(--bb-muted); }
+  .bb-buchen {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    margin-top: 0.6rem;
+    padding: 0 1rem;
+    border-radius: 999px;
+    background: var(--bb-accent-tint);
+    color: var(--bb-accent) !important;
+    font-weight: 700;
+    text-decoration: none;
+  }
+}
+
+/* ---------- 16. Handy: Buchungsformular (edit_entry.php) ------------------ */
+.bb-pruefung { display: none; }
+
+@media (max-width: 700px) {
+  /* MRBS ordnet die Zeilen mit float und festen Breiten an – am Handy wird
+     daraus eine Spalte mit Feldern über die volle Breite, in Karten */
+  form#main[action$="edit_entry_handler.php"] { float: none; width: 100%; }
+  form#main[action$="edit_entry_handler.php"] > fieldset {
+    float: none;
+    width: auto;
+    box-sizing: border-box;
+    margin: 0 0 0.75rem;
+    padding: 0.9rem 1rem 0.4rem;
+    border: 0;
+    border-radius: var(--bb-radius);
+    background: var(--bb-surface);
+    box-shadow: var(--bb-shadow);
+  }
+  form#main[action$="edit_entry_handler.php"] > fieldset > legend {
+    float: left;
+    width: 100%;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    font-size: 1.15rem;
+  }
+  form#main[action$="edit_entry_handler.php"] > fieldset > legend + * { clear: both; }
+  form#main[action$="edit_entry_handler.php"] > fieldset > div,
+  #rep_info > div > div {
+    float: none;
+    display: block;
+    width: 100%;
+    margin: 0 0 0.85rem;
+  }
+  form#main[action$="edit_entry_handler.php"] > fieldset > div > label:first-child {
+    display: block;
+    float: none;
+    width: auto;
+    margin: 0 0 0.3rem;
+    text-align: left;
+  }
+  form#main[action$="edit_entry_handler.php"] input[type="text"],
+  form#main[action$="edit_entry_handler.php"] input.form-control,
+  form#main[action$="edit_entry_handler.php"] textarea,
+  form#main[action$="edit_entry_handler.php"] select {
+    float: none;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  form#main[action$="edit_entry_handler.php"] select[multiple] { min-height: 0; }
+
+  /* Anfang/Ende: Datum oben, darunter Uhrzeit und "Ganztägig" nebeneinander */
+  .start_end > div {
+    display: grid !important;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem 0.75rem;
+    align-items: center;
+    width: 100%;
+  }
+  .start_end > div > input.form-control { grid-column: 1 / -1; text-align: left; }
+  .start_end > div > select { float: none; margin: 0; }
+  .start_end > div > div { margin: 0; }
+  .start_end > div > .none,
+  .start_end > div > select.none { display: none !important; }
+  .start_end > div > .error:empty { display: none; }
+  .start_end > div > .error { grid-column: 1 / -1; }
+
+  /* Auswahl per Radio/Checkbox als antippbare Chips */
+  form#main[action$="edit_entry_handler.php"] .group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  form#main[action$="edit_entry_handler.php"] .group > label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 40px;
+    margin: 0;
+    padding: 0 0.85rem 0 0.6rem;
+    border: 1px solid var(--bb-field-border);
+    border-radius: 999px;
+    background: var(--bb-surface);
+    font-weight: 600;
+  }
+  form#main[action$="edit_entry_handler.php"] .group > label:has(input:checked) {
+    border-color: var(--bb-accent);
+    background: var(--bb-accent-tint);
+  }
+  #rep_info .rep_type_details { margin-top: 0.75rem; padding: 0; border: 0; }
+  #rep_info .rep_type_details fieldset { padding: 0; border: 0; margin: 0 0 0.5rem; }
+
+  /* Anmeldung erlauben: Häkchen und Text nebeneinander */
+  #registration > div:has(#allow_registration) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.3rem 0.6rem;
+    align-items: start;
+  }
+  #registration > div:has(#allow_registration) > label:first-child { grid-column: 1 / -1; }
+  #registration .bb-mitsegler-hint { margin: 0; }
+  .bb-capacity-hint { display: block; margin: 0.3rem 0 0; }
+
+  /* Speichern immer erreichbar: Leiste über der App-Navigation */
+  form#main[action$="edit_entry_handler.php"] > fieldset:has(.submit_buttons) {
+    position: sticky;
+    bottom: 0;
+    z-index: 40;
+    margin: 0 -0.75rem;
+    padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+    border-radius: 0;
+    border-top: 1px solid var(--bb-border);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+  }
+  html.bb-hat-appnav form#main[action$="edit_entry_handler.php"] > fieldset:has(.submit_buttons) {
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    padding-bottom: 0.6rem;
+  }
+  .submit_buttons {
+    display: flex !important;
+    align-items: center;
+    gap: 0.6rem;
+    float: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  .submit_buttons > label { margin: 0 !important; padding: 0 !important; width: auto !important; }
+  .submit_buttons > * { float: none !important; }
+  .submit_buttons > div { display: flex !important; flex: 1; gap: 0.6rem; align-items: center; margin: 0 !important; }
+  .submit_buttons input { margin: 0 !important; }
+  .submit_buttons input[name="save_button"] { flex: 1; }
+  /* Die Symbole ✗/✓ ersetzt am Handy ein lesbarer Satz (theme.js) */
+  .submit_buttons #checks { display: none !important; } /* MRBS setzt display per Skript */
+  .bb-pruefung {
+    display: block;
+    margin: 0 0 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--bb-danger) 12%, transparent);
+    color: var(--bb-danger);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: pre-line;
+  }
+  .bb-pruefung[hidden] { display: none; }
+  /* Mit fester Speichern-Leiste kein "+"-Knopf und kein Impressum davor */
+  body:has(form#main[action$="edit_entry_handler.php"]) .bb-footer { display: none; }
+}
