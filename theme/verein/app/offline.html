@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0c0e0d">
+<title>Keine Verbindung – Bootsbuchung</title>
+<style>
+  :root { --bg: #e8ece7; --surface: #ffffff; --text: #121714; --muted: #5b655e; --accent: #1b7d33; --on-accent: #ffffff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1311; --surface: #171c19; --text: #e6ebe7; --muted: #9aa49d; --accent: #45c266; --on-accent: #0c0e0d; }
+  }
+  html, body { margin: 0; height: 100%; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 16px; box-sizing: border-box;
+  }
+  main { background: var(--surface); border-radius: 16px; padding: 32px 24px; max-width: 360px; text-align: center; }
+  img { width: 72px; height: 72px; border-radius: 16px; }
+  h1 { font-size: 1.3rem; margin: 16px 0 8px; }
+  p { color: var(--muted); margin: 0 0 24px; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 12px 20px;
+    background: var(--accent); color: var(--on-accent); cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<main>
+  <img src="data:image/png;base64,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" alt="">
+  <h1>Keine Verbindung</h1>
+  <p>Die Bootsbuchung braucht Internet. Bitte prüfe WLAN oder mobile Daten und versuche es noch einmal.</p>
+  <button type="button" onclick="location.reload()">Erneut versuchen</button>
+</main>
+</body>
+</html>

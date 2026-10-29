@@ -444,3 +444,598 @@
   };
   if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
 })();
+
+
+/* =============================================================================
+   Benachrichtigungen (Push)
+
+   Menüpunkt "Benachrichtigungen" für angemeldete Benutzer und die Knöpfe auf
+   der Seite bb_benachrichtigungen.php (aus push.patch). Der Service Worker
+   (app/sw.php) zeigt die Nachrichten an.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  function addMenu() {
+    var menu = document.querySelector('header.banner:not(.simple) nav.menu');
+    if (!menu || menu.querySelector('.bb-menu-push') || !document.getElementById('show_my_entries')) {
+      return;
+    }
+    var a = document.createElement('a');
+    a.className = 'bb-menu-push';
+    a.href = 'bb_benachrichtigungen.php';
+    a.textContent = 'Benachrichtigungen';
+    if (/bb_benachrichtigungen\.php/.test(location.pathname)) {
+      a.setAttribute('aria-current', 'page');
+    }
+    var mitsegeln = menu.querySelector('.bb-menu-mitsegeln');
+    menu.insertBefore(a, mitsegeln ? mitsegeln.nextSibling : menu.firstChild);
+  }
+
+  function b64ToBytes(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(s + '==='.slice((s.length + 3) % 4));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) { out[i] = raw.charCodeAt(i); }
+    return out;
+  }
+
+  function post(data) {
+    var token = document.querySelector('meta[name="csrf_token"]');
+    var body = new URLSearchParams(data);
+    body.append('csrf_token', token ? token.content : '');
+    return fetch('bb_benachrichtigungen.php', { method: 'POST', body: body, credentials: 'same-origin' })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          if (!r.ok) { throw new Error(j.fehler || ('Fehler ' + r.status)); }
+          return j;
+        });
+      });
+  }
+
+  function initPage() {
+    var root = document.getElementById('bb-push');
+    if (!root || root.dataset.init || !root.dataset.key) {
+      return;
+    }
+    root.dataset.init = '1';
+
+    var status = document.getElementById('bb-push-status');
+    var btnAn = document.getElementById('bb-push-an');
+    var btnAus = document.getElementById('bb-push-aus');
+    var btnTest = document.getElementById('bb-push-test');
+    var nur = document.getElementById('bb-push-nur');
+    var geraete = document.getElementById('bb-push-geraete');
+
+    function zeigeGeraete(n) {
+      geraete.textContent = (n === 0)
+        ? 'Push ist noch auf keinem deiner Geräte eingeschaltet. Bis dahin bekommst du auf jeden Fall Mails.'
+        : 'Push ist auf ' + (n === 1 ? 'einem Gerät' : n + ' Geräten') + ' eingeschaltet. ' +
+          'Kommt eine Push-Nachricht nicht an, schicken wir trotzdem eine Mail.';
+    }
+    function update(j) {
+      if (typeof j.geraete === 'number') { zeigeGeraete(j.geraete); }
+      if (typeof j.nur_push === 'boolean') { nur.checked = j.nur_push; }
+    }
+    zeigeGeraete(parseInt(root.dataset.geraete, 10) || 0);
+    nur.checked = root.dataset.nurPush === '1';
+
+    function zustand(text, an) {
+      status.textContent = text;
+      btnAn.hidden = (an !== false);
+      btnAus.hidden = btnTest.hidden = (an !== true);
+    }
+
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      var ios = /iPhone|iPad/.test(navigator.userAgent);
+      zustand(ios
+        ? 'Auf dem iPhone geht Push nur, wenn die Bootsbuchung auf dem Home-Bildschirm liegt: in Safari „Teilen“ → „Zum Home-Bildschirm“, dann von dort öffnen.'
+        : 'Dieser Browser kann leider keine Push-Nachrichten empfangen.', null);
+      return;
+    }
+
+    var reg;
+    function pruefen() {
+      return navigator.serviceWorker.ready.then(function (r) {
+        reg = r;
+        return r.pushManager.getSubscription();
+      }).then(function (sub) {
+        if (Notification.permission === 'denied') {
+          zustand('Benachrichtigungen sind für diese Seite blockiert. Erlaube sie in den Einstellungen des Browsers bzw. der App und lade die Seite neu.', null);
+        } else if (sub) {
+          zustand('Push ist auf diesem Gerät eingeschaltet.', true);
+          // Anmeldung auffrischen, falls der Server sie gelöscht hat
+          post({ action: 'anmelden', abo: JSON.stringify(sub) }).then(update).catch(function () {});
+        } else {
+          zustand('Push ist auf diesem Gerät ausgeschaltet.', false);
+        }
+      });
+    }
+
+    btnAn.addEventListener('click', function () {
+      btnAn.disabled = true;
+      Notification.requestPermission().then(function (p) {
+        if (p !== 'granted') { throw new Error('Benachrichtigungen wurden nicht erlaubt.'); }
+        return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(root.dataset.key) });
+      }).then(function (sub) {
+        return post({ action: 'anmelden', abo: JSON.stringify(sub) });
+      }).then(function (j) {
+        update(j);
+        return pruefen();
+      }).catch(function (e) {
+        status.textContent = 'Das hat nicht geklappt: ' + e.message;
+      }).then(function () { btnAn.disabled = false; });
+    });
+
+    btnAus.addEventListener('click', function () {
+      btnAus.disabled = true;
+      reg.pushManager.getSubscription().then(function (sub) {
+        if (!sub) { return null; }
+        var endpoint = sub.endpoint;
+        return sub.unsubscribe().then(function () { return post({ action: 'abmelden', endpoint: endpoint }); });
+      }).then(function (j) {
+        if (j) { update(j); }
+        return pruefen();
+      }).catch(function (e) {
+        status.textContent = 'Das hat nicht geklappt: ' + e.message;
+      }).then(function () { btnAus.disabled = false; });
+    });
+
+    btnTest.addEventListener('click', function () {
+      btnTest.disabled = true;
+      post({ action: 'test' }).then(function (j) {
+        update(j);
+        status.textContent = j.zugestellt > 0
+          ? 'Test-Nachricht verschickt. Sie sollte gleich erscheinen.'
+          : 'Die Test-Nachricht konnte nicht zugestellt werden. Bitte Push aus- und wieder einschalten.';
+      }).catch(function (e) {
+        status.textContent = 'Das hat nicht geklappt: ' + e.message;
+      }).then(function () { btnTest.disabled = false; });
+    });
+
+    nur.addEventListener('change', function () {
+      post({ action: 'nur_push', wert: nur.checked ? '1' : '0' }).then(update).catch(function (e) {
+        nur.checked = !nur.checked;
+        status.textContent = 'Das hat nicht geklappt: ' + e.message;
+      });
+    });
+
+    pruefen();
+  }
+
+  function init() {
+    addMenu();
+    initPage();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  var start = function () {
+    new MutationObserver(addMenu).observe(document.body, { childList: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
+   Handy: App-Navigation unten
+
+   Wie in nativen Apps: eine Leiste unten mit Plan, Mitsegeln, Meine,
+   Benachrichtigungen und Mehr (klappt das Menü der Kopfzeile auf). Auf dem
+   Plan zusätzlich ein runder „+“-Knopf für eine neue Buchung. Wer nicht
+   angemeldet ist, sieht dort stattdessen einen großen Knopf „Anmelden“.
+   Nur auf schmalen Bildschirmen (siehe theme.css, 14.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var svg = function (pfad) {
+    return '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+           'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + pfad + '</svg>';
+  };
+  var ICON = {
+    plan:   svg('<rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M3 9h18M8 2v4M16 2v4"></path>'),
+    segeln: svg('<path d="M12 3v14M11 4 4 15h7zM13 6l6 9h-6zM3 18h18l-2 3H5z"></path>'),
+    meine:  svg('<circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path>'),
+    push:   svg('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 0 1-3.4 0"></path>'),
+    mehr:   svg('<circle cx="5" cy="12" r="1.2"></circle><circle cx="12" cy="12" r="1.2"></circle><circle cx="19" cy="12" r="1.2"></circle>'),
+    plus:   svg('<path d="M12 5v14M5 12h14"></path>')
+  };
+
+  function seite() {
+    var p = location.pathname;
+    var q = location.search;
+    if (/bb_mitsegeln\.php/.test(p)) { return /filter=meine/.test(q) ? 'meine' : 'segeln'; }
+    if (/bb_benachrichtigungen\.php/.test(p)) { return 'push'; }
+    if (/(index\.php|\/)$/.test(p) || /index\.php/.test(p)) { return 'plan'; }
+    return '';
+  }
+
+  // Nicht angemeldet: statt der Leiste ein großer Knopf „Anmelden“ – sonst
+  // steckt die Anmeldung im Menü ☰ und ist schwer zu finden
+  function addGast() {
+    var knopf = document.querySelector('nav.logon input[type="submit"]');
+    if (!knopf || document.getElementById('username')) {
+      return;
+    }
+    var nav = document.createElement('nav');
+    nav.className = 'bb-appnav bb-appnav-gast';
+    nav.setAttribute('aria-label', 'Anmelden');
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'bb-anmelden';
+    b.innerHTML = ICON.meine + '<span>Anmelden</span>';
+    b.addEventListener('click', function () { knopf.click(); });
+    nav.appendChild(b);
+    document.body.appendChild(nav);
+    document.documentElement.classList.add('bb-hat-appnav');
+  }
+
+  function add() {
+    if (document.querySelector('.bb-appnav')) {
+      return;
+    }
+    // Angemeldet erkennt man am Link „Meine Einträge“ in der Kopfzeile
+    if (!document.getElementById('show_my_entries')) {
+      addGast();
+      return;
+    }
+    var aktiv = seite();
+    var nav = document.createElement('nav');
+    nav.className = 'bb-appnav';
+    nav.setAttribute('aria-label', 'App-Navigation');
+    var eintraege = [
+      ['plan', 'Plan', 'index.php'],
+      ['segeln', 'Mitsegeln', 'bb_mitsegeln.php'],
+      ['meine', 'Meine', 'bb_mitsegeln.php?filter=meine'],
+      ['push', 'Hinweise', 'bb_benachrichtigungen.php'],
+      ['mehr', 'Mehr', null]
+    ];
+    eintraege.forEach(function (e) {
+      var el = document.createElement(e[2] ? 'a' : 'button');
+      if (e[2]) {
+        el.href = e[2];
+      } else {
+        el.type = 'button';
+      }
+      el.innerHTML = ICON[e[0]] + '<span>' + e[1] + '</span>';
+      if (e[0] === aktiv) {
+        el.setAttribute('aria-current', 'page');
+      }
+      if (e[0] === 'mehr') {
+        el.addEventListener('click', function () {
+          var t = document.querySelector('.bb-menu-toggle');
+          if (t) {
+            t.click();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        });
+      }
+      nav.appendChild(el);
+    });
+    document.body.appendChild(nav);
+    document.documentElement.classList.add('bb-hat-appnav');
+
+    // Plan: "+" für eine neue Buchung am angezeigten Tag
+    if (aktiv === 'plan' && !document.querySelector('.bb-fab')) {
+      var fab = document.createElement('a');
+      fab.className = 'bb-fab';
+      fab.href = 'edit_entry.php' + location.search;
+      fab.setAttribute('aria-label', 'Neue Buchung');
+      fab.innerHTML = ICON.plus;
+      document.body.appendChild(fab);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', add);
+  } else {
+    add();
+  }
+  // MRBS ersetzt beim Blättern den Seiteninhalt (siehe oben)
+  var start = function () {
+    new MutationObserver(add).observe(document.body, { childList: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
+   Handy: Tagesplan als Liste
+
+   Die Tabelle der Tagesansicht (ein Boot je Spalte) ist am Handy eng. Hier
+   wird daraus eine Karte je Boot mit seinen Buchungen und einem Knopf
+   „Buchen“. Ein Umschalter „Liste | Raster“ holt die Tabelle zurück, die
+   Wahl merkt sich der Browser. Gebaut wird aus der Tabelle selbst, deshalb
+   gilt alles, was MRBS dort berechnet (Rechte, private Buchungen …).
+   Sichtbar nur auf schmalen Bildschirmen (theme.css, 15.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var KEY = 'bb-tagesansicht';
+
+  function modus() {
+    try { return window.localStorage.getItem(KEY) === 'raster' ? 'raster' : 'liste'; } catch (e) { return 'liste'; }
+  }
+
+  function setzeModus(m) {
+    try { window.localStorage.setItem(KEY, m); } catch (e) { /* egal */ }
+    document.documentElement.classList.toggle('bb-tagesraster', m === 'raster');
+    document.querySelectorAll('.bb-ansicht-umschalter button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.modus === m ? 'true' : 'false');
+    });
+  }
+
+  function uhrzeit(sek) {
+    var h = Math.floor(sek / 3600) % 24;
+    var m = Math.floor((sek % 3600) / 60);
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+
+  // Tabelle auslesen: je Boot Name, Kapazität, Buchungen und erster freier Platz
+  function auslesen(table) {
+    var aufloesung = parseInt(table.dataset.resolution, 10) || 1800;
+    var boote = [];
+    table.querySelectorAll('thead th[data-room]').forEach(function (th) {
+      var a = th.querySelector('a');
+      var kap = th.querySelector('.capacity');
+      boote.push({
+        name: (a ? a.childNodes[0].textContent : th.textContent).trim(),
+        kapazitaet: kap ? kap.textContent.trim() : '',
+        woche: a ? a.getAttribute('href') : null,
+        buchungen: [],
+        frei: null
+      });
+    });
+    var belegt = [];   // je Spalte: bis zu welcher Zeile durch rowspan belegt
+    var zeilen = table.querySelectorAll('tbody > tr');
+    zeilen.forEach(function (tr, r) {
+      var th = tr.querySelector('th[data-seconds]');
+      if (!th) { return; }
+      var start = parseInt(th.dataset.seconds, 10);
+      var spalte = 0;
+      Array.prototype.forEach.call(tr.children, function (td) {
+        if (td.tagName !== 'TD') { return; }
+        while (belegt[spalte] > r) { spalte++; }
+        var span = parseInt(td.getAttribute('rowspan'), 10) || 1;
+        belegt[spalte] = r + span;
+        var boot = boote[spalte];
+        if (boot) {
+          var link = td.querySelector('.booking a, a[href*="view_entry"]');
+          var box = td.querySelector('.booking');
+          if (link) {
+            var text = link.textContent.trim();
+            var platz = text.match(/\s*\[(\d+)(?:\/(\d+))?\]\s*$/);
+            boot.buchungen.push({
+              von: start,
+              bis: start + span * aufloesung,
+              name: platz ? text.slice(0, platz.index) : text,
+              plaetze: platz ? (platz[1] + (platz[2] ? ' / ' + platz[2] : '')) : '',
+              href: link.getAttribute('href'),
+              kurs: !!(box && box.classList.contains('bb-kurs')),
+              mitsegeln: !!(box && (box.classList.contains('spaces') || box.classList.contains('full'))),
+              voll: !!(box && box.classList.contains('full'))
+            });
+          } else if (!boot.frei && td.classList.contains('new')) {
+            var neu = td.querySelector('a');
+            if (neu) { boot.frei = neu.getAttribute('href'); }
+          }
+        }
+        spalte++;
+      });
+    });
+    return boote;
+  }
+
+  function bauen(table) {
+    if (table.dataset.bbListe === '1') { return; }
+    table.dataset.bbListe = '1';
+    var container = table.closest('.table_container') || table;
+    var alt = container.parentNode.querySelector('.bb-tagesliste');
+    if (alt) { alt.remove(); }
+
+    var liste = el('div', 'bb-tagesliste');
+    auslesen(table).forEach(function (boot) {
+      var karte = el('section', 'bb-bootkarte');
+      var kopf = el('header');
+      var titel = el(boot.woche ? 'a' : 'span', 'bb-bootname', boot.name);
+      if (boot.woche) { titel.href = boot.woche; }
+      kopf.appendChild(titel);
+      if (boot.kapazitaet && boot.kapazitaet !== '0') {
+        kopf.appendChild(el('span', 'bb-kapazitaet', boot.kapazitaet + (boot.kapazitaet === '1' ? ' Platz' : ' Plätze')));
+      }
+      karte.appendChild(kopf);
+
+      if (!boot.buchungen.length) {
+        karte.appendChild(el('p', 'bb-frei', 'Den ganzen Tag frei'));
+      } else {
+        var ul = el('ul');
+        boot.buchungen.forEach(function (b) {
+          var li = el('li');
+          var a = el('a');
+          a.href = b.href;
+          a.className = b.kurs ? 'kurs' : (b.mitsegeln ? 'mitsegeln' : '');
+          a.appendChild(el('span', 'zeit', uhrzeit(b.von) + ' – ' + uhrzeit(b.bis)));
+          var mitte = el('span', 'wer');
+          if (b.kurs || b.mitsegeln) {
+            mitte.appendChild(el('span', 'marke', b.kurs ? 'Kurs' : (b.voll ? 'voll' : 'Mitsegeln')));
+          }
+          mitte.appendChild(document.createTextNode(b.name));
+          a.appendChild(mitte);
+          if (b.plaetze) { a.appendChild(el('span', 'plaetze', b.plaetze)); }
+          li.appendChild(a);
+          ul.appendChild(li);
+        });
+        karte.appendChild(ul);
+      }
+      if (boot.frei) {
+        var knopf = el('a', 'bb-buchen', '+ Buchen');
+        knopf.href = boot.frei;
+        karte.appendChild(knopf);
+      }
+      liste.appendChild(karte);
+    });
+    container.parentNode.insertBefore(liste, container.nextSibling);
+
+    // Umschalter Liste | Raster neben Tag/Woche/Monat
+    if (!document.querySelector('.bb-ansicht-umschalter')) {
+      var nav = document.querySelector('nav.main_calendar') || container.parentNode;
+      var u = el('div', 'bb-ansicht-umschalter');
+      u.setAttribute('role', 'group');
+      u.setAttribute('aria-label', 'Darstellung');
+      [['liste', 'Liste'], ['raster', 'Raster']].forEach(function (m) {
+        var b = el('button', null, m[1]);
+        b.type = 'button';
+        b.dataset.modus = m[0];
+        b.addEventListener('click', function () { setzeModus(m[0]); });
+        u.appendChild(b);
+      });
+      nav.parentNode.insertBefore(u, nav.nextSibling);
+    }
+    setzeModus(modus());
+  }
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () {
+      geplant = false;
+      var t = document.getElementById('day_main');
+      if (t) { bauen(t); }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pruefen);
+  } else {
+    pruefen();
+  }
+  // MRBS lädt die Tabelle beim Blättern und regelmäßig neu
+  var start = function () {
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+/* =============================================================================
+   Handy: Buchungsformular – Prüfung als Satz
+
+   MRBS prüft beim Ausfüllen, ob das Boot frei ist und die Regeln passen, und
+   zeigt das nur als ✗/✓ mit Text beim Überfahren mit der Maus. Am Handy gibt
+   es kein Überfahren: Hier steht bei einem Problem der Text über dem Knopf
+   „Speichern“ (theme.css, 16.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  function einrichten() {
+    var checks = document.getElementById('checks');
+    if (!checks) { return; }
+    var p = document.createElement('p');
+    p.className = 'bb-pruefung';
+    p.setAttribute('aria-live', 'polite');
+    p.hidden = true;
+    var leiste = checks.closest('fieldset') || checks.parentNode;
+    leiste.insertBefore(p, leiste.firstChild);
+
+    function zeigen() {
+      var text = '';
+      ['conflict_check', 'policy_check'].forEach(function (id) {
+        var s = document.getElementById(id);
+        if (!text && s && s.classList.contains('bad')) {
+          text = (s.getAttribute('title') || '').replace(/[ \t]+$/gm, '').replace(/\n{2,}/g, '\n').trim();
+        }
+      });
+      p.textContent = text;
+      p.hidden = !text;
+    }
+    zeigen();
+    new MutationObserver(zeigen).observe(checks, { subtree: true, attributes: true, attributeFilter: ['class', 'title'] });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', einrichten);
+  } else {
+    einrichten();
+  }
+})();
+
+
+/* =============================================================================
+   Hinweis "Desktop-Ansicht" auf dem Handy
+
+   Hat jemand im Browser „Desktopwebsite“ eingeschaltet, meldet der Browser
+   eine PC-Breite und die Handy-Ansicht greift nicht – auch nicht in der App.
+   Abschalten kann das nur der Browser selbst. Wir zeigen dann oben einen
+   Hinweis, wie es geht. Er ist so groß gesetzt, dass er trotz der
+   verkleinerten Desktop-Darstellung lesbar bleibt, und lässt sich für
+   30 Tage wegklicken.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var KEY = 'bb-desktop-hinweis';
+  var TAGE = 30;
+
+  function istDesktopAufHandy() {
+    var kurz = Math.min(window.screen.width, window.screen.height);
+    return navigator.maxTouchPoints > 0 && kurz > 0 && kurz < 600 &&
+           window.innerWidth > 800;
+  }
+
+  function weggeklickt() {
+    try {
+      var t = parseInt(window.localStorage.getItem(KEY), 10);
+      return t > 0 && (Date.now() - t) < TAGE * 864e5;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function zeigen() {
+    if (document.getElementById('bb-desktop-hinweis') || !istDesktopAufHandy() || weggeklickt()) {
+      return;
+    }
+    // Faktor, um den der Browser die Desktop-Seite verkleinert
+    var f = Math.max(1, window.innerWidth / Math.min(window.screen.width, window.screen.height));
+    var px = function (n) { return Math.round(n * f) + 'px'; };
+
+    var box = document.createElement('div');
+    box.id = 'bb-desktop-hinweis';
+    box.setAttribute('role', 'status');
+    box.style.cssText = 'position:relative;z-index:1000;margin:' + px(8) + ';padding:' + px(14) + ' ' + px(16) +
+      ';border-radius:' + px(12) + ';background:var(--bb-surface,#fff);color:var(--bb-text,#121714);' +
+      'box-shadow:0 0 0 ' + px(2) + ' var(--bb-accent,#1b7d33);font-size:' + px(16) + ';line-height:1.45;';
+    box.innerHTML =
+      '<strong style="display:block;font-size:' + px(18) + ';margin-bottom:' + px(6) + '">Desktop-Ansicht ist eingeschaltet</strong>' +
+      'Auf dem Handy ist die Bootsbuchung so schwer zu bedienen. Bitte im Browser ausschalten: ' +
+      'Menü ⋮ → <b>Einstellungen</b> → <b>Website-Einstellungen</b> → <b>Desktopwebsite</b> aus. ' +
+      'Danach die Seite bzw. App neu öffnen.' +
+      '<button type="button" style="display:block;margin-top:' + px(10) + ';font:inherit;font-weight:600;' +
+      'padding:' + px(8) + ' ' + px(14) + ';border-radius:' + px(8) + ';border:' + px(1) + ' solid var(--bb-border,#d3dad2);' +
+      'background:transparent;color:inherit;cursor:pointer">Ausblenden</button>';
+    box.querySelector('button').addEventListener('click', function () {
+      try { window.localStorage.setItem(KEY, String(Date.now())); } catch (e) { /* egal */ }
+      box.remove();
+    });
+    document.body.insertBefore(box, document.body.firstChild);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', zeigen);
+  } else {
+    zeigen();
+  }
+})();

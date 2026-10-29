@@ -1,0 +1,547 @@
+diff --git a/web/lib/MRBS/MailQueue.php b/web/lib/MRBS/MailQueue.php
+index da9fb6e..602e325 100644
+--- a/web/lib/MRBS/MailQueue.php
++++ b/web/lib/MRBS/MailQueue.php
+@@ -56,6 +56,11 @@ class MailQueue
+       return;
+     }
+ 
++    // Bootsbuchung-Anpassung: Empfänger mit App bekommen zusätzlich eine Push-Nachricht.
++    // Wer "keine Mails mehr" gewählt hat und erreicht wurde, fällt aus der Mail raus.
++    require_once MRBS_ROOT . '/bb_push.inc';
++    $addresses = bb_push_zu_mail($addresses, $subject, $text_body);
++
+     // And no point in doing anything if there are no recipients
+     if (self::getNRecipients($addresses) == 0)
+     {
+diff --git a/web/bb_benachrichtigungen.php b/web/bb_benachrichtigungen.php
+new file mode 100644
+index 0000000..075ac51
+--- /dev/null
++++ b/web/bb_benachrichtigungen.php
+@@ -0,0 +1,177 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Seite "Benachrichtigungen"
++//
++// Hier schaltet jedes Mitglied Push-Nachrichten für sein Gerät ein oder aus
++// und wählt, ob es dann noch Mails bekommen möchte. Die Technik steht in
++// bb_push.inc, der Menüpunkt kommt aus Themes/verein/theme.js.
++//
++// POST-Aktionen (per fetch aus dieser Seite, Antwort JSON):
++//   anmelden    abo = PushSubscription als JSON   → Gerät speichern
++//   abmelden    endpoint                          → Gerät löschen
++//   nur_push    wert = 0/1                        → Mails ja/nein
++//   test        –                                 → Test-Nachricht an alle eigenen Geräte
++// =============================================================================
++
++require "defaultincludes.inc";
++require_once "bb_push.inc";
++
++checkAuthorised('search.php');
++
++$mrbs_user = session()->getCurrentUser();
++$username  = isset($mrbs_user) ? $mrbs_user->username : '';
++
++$tabelle = _tbl('bb_push');
++
++function bb_push_geraete(string $username) : int
++{
++  try
++  {
++    return (int) db()->query1("SELECT COUNT(*) FROM " . _tbl('bb_push') . " WHERE username=?", [$username]);
++  }
++  catch (\Throwable $e)
++  {
++    return 0;
++  }
++}
++
++function bb_push_nur_push(string $username) : bool
++{
++  try
++  {
++    return ((int) db()->query1("SELECT nur_push FROM " . _tbl('users') . " WHERE name=? LIMIT 1", [$username]) === 1);
++  }
++  catch (\Throwable $e)
++  {
++    return false;
++  }
++}
++
++if ($server['REQUEST_METHOD'] === 'POST')
++{
++  Form::checkToken();
++  header('Content-Type: application/json; charset=utf-8');
++  header('Cache-Control: no-store');
++
++  if ($username === '' || !bb_push_aktiv())
++  {
++    http_response_code(403);
++    echo json_encode(['fehler' => 'Push ist nicht verfügbar.']);
++    exit;
++  }
++
++  $action = get_form_var('action', 'string');
++  $antwort = ['ok' => true];
++
++  switch ($action)
++  {
++    case 'anmelden':
++      $abo = json_decode((string) get_form_var('abo', 'string'), true);
++      $endpoint = (string) ($abo['endpoint'] ?? '');
++      $p256dh   = (string) ($abo['keys']['p256dh'] ?? '');
++      $auth     = (string) ($abo['keys']['auth'] ?? '');
++      $host     = (string) parse_url($endpoint, PHP_URL_HOST);
++      if ((strpos($endpoint, 'https://') !== 0 || !preg_match(BB_PUSH_HOSTS, $host)) && !bb_push_host_extra($endpoint) ||
++          strlen(bb_b64u_dec($p256dh)) !== 65 || strlen(bb_b64u_dec($auth)) !== 16)
++      {
++        http_response_code(400);
++        echo json_encode(['fehler' => 'Ungültige Anmeldung des Geräts.']);
++        exit;
++      }
++      // Ein Gerät gehört immer nur einem Mitglied (z. B. nach Wechsel des Logins)
++      db()->command("DELETE FROM $tabelle WHERE endpoint_hash=?", [hash('sha256', $endpoint)]);
++      db()->command("INSERT INTO $tabelle (username, endpoint_hash, endpoint, p256dh, auth, created, last_used, user_agent)
++                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
++                    [$username, hash('sha256', $endpoint), $endpoint, $p256dh, $auth, time(), 0,
++                     mb_substr((string) ($server['HTTP_USER_AGENT'] ?? ''), 0, 250)]);
++      break;
++
++    case 'abmelden':
++      $endpoint = (string) get_form_var('endpoint', 'string');
++      db()->command("DELETE FROM $tabelle WHERE endpoint_hash=? AND username=?", [hash('sha256', $endpoint), $username]);
++      break;
++
++    case 'nur_push':
++      $wert = (get_form_var('wert', 'string') === '1') ? 1 : 0;
++      db()->command("UPDATE " . _tbl('users') . " SET nur_push=? WHERE name=?", [$wert, $username]);
++      break;
++
++    case 'test':
++      $antwort['zugestellt'] = bb_push_an_benutzer($username, [
++        'title' => 'Test: Bootsbuchung',
++        'body'  => 'So sehen Benachrichtigungen aus. Es klappt!',
++        'url'   => url_base() . multisite('bb_benachrichtigungen.php')
++      ]);
++      break;
++
++    default:
++      http_response_code(400);
++      $antwort = ['fehler' => 'Unbekannte Aktion'];
++  }
++
++  $antwort['geraete']  = bb_push_geraete($username);
++  $antwort['nur_push'] = bb_push_nur_push($username);
++  echo json_encode($antwort);
++  exit;
++}
++
++
++$context = array(
++    'view'      => $view,
++    'view_all'  => $view_all,
++    'year'      => $year,
++    'month'     => $month,
++    'day'       => $day,
++    'area'      => $area,
++    'room'      => $room ?? null
++  );
++
++print_header($context);
++
++$aktiv = bb_push_aktiv();
++echo "<div id=\"bb-push\"" .
++     ($aktiv ? ' data-key="' . escape_html($bb_push['public']) . '"' : '') .
++     ' data-geraete="' . bb_push_geraete($username) . '"' .
++     ' data-nur-push="' . (bb_push_nur_push($username) ? '1' : '0') . "\">\n";
++echo "<h2>Benachrichtigungen</h2>\n";
++
++if (!$aktiv)
++{
++  echo "<p class=\"bb-intro\">Push-Nachrichten sind auf diesem Server noch nicht eingerichtet. " .
++       "Du bekommst wie bisher Mails.</p>\n";
++}
++else
++{
++  echo <<<'HTML'
++<p class="bb-intro">Mit Push bekommst du Anmeldungen, Absagen, Erinnerungen und Meldungen
++sofort aufs Handy, statt sie erst später in den Mails zu finden.</p>
++
++<section class="bb-push-karte">
++  <h3>Dieses Gerät</h3>
++  <p class="bb-push-status" id="bb-push-status">Wird geprüft …</p>
++  <p class="bb-push-knoepfe">
++    <button type="button" id="bb-push-an" hidden>Push auf diesem Gerät einschalten</button>
++    <button type="button" id="bb-push-aus" class="zweitrangig" hidden>Push auf diesem Gerät ausschalten</button>
++    <button type="button" id="bb-push-test" class="zweitrangig" hidden>Test-Nachricht senden</button>
++  </p>
++</section>
++
++<section class="bb-push-karte">
++  <h3>Mails</h3>
++  <label class="bb-push-option">
++    <input type="checkbox" id="bb-push-nur">
++    <span>Keine Mails mehr, wenn die Push-Nachricht ankommt</span>
++  </label>
++  <p class="bb-push-hinweis" id="bb-push-geraete"></p>
++</section>
++HTML;
++}
++
++echo "</div>\n";
++
++print_footer();
+diff --git a/web/bb_push.inc b/web/bb_push.inc
+new file mode 100644
+index 0000000..7b66be6
+--- /dev/null
++++ b/web/bb_push.inc
+@@ -0,0 +1,342 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Push-Benachrichtigungen (Web Push)
++//
++// Mitglieder, die in der App „Benachrichtigungen“ einschalten, bekommen jede
++// Mail, die MRBS an sie schickt, zusätzlich als Push-Nachricht aufs Handy.
++// Wer „keine Mails mehr“ gewählt hat, bekommt nur noch Push – aber nur, wenn
++// die Push-Nachricht auch zugestellt wurde. Sonst geht die Mail wie bisher raus.
++//
++// Eingehängt in MailQueue::add() (lib/MRBS/MailQueue.php), damit alle Mails
++// erfasst sind: Kurs-/Mitsegel-Mails, Bootswart-Meldungen, Erinnerungen.
++//
++// Verschlüsselung nach RFC 8291 (aes128gcm), Absender-Kennung nach RFC 8292
++// (VAPID). Nur mit Bordmitteln von PHP (openssl), ohne Zusatzbibliotheken.
++//
++// Braucht in der config.inc.php (Schlüssel erzeugt tools/push-schluessel.php):
++//   $bb_push = [
++//     'public'  => '...',
++//     'private' => '...',
++//     'subject' => 'mailto:vorstand@example.org',
++//   ];
++// Datenbank: sql/push.sql
++// =============================================================================
++
++
++// Push-Dienste der Browser. Nur an diese Adressen schickt der Server etwas,
++// damit niemand ihn über eine erfundene „Anmeldung“ andere Rechner ansprechen lässt.
++const BB_PUSH_HOSTS = '/(^|\.)(fcm\.googleapis\.com|android\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/i';
++
++
++function bb_push_aktiv() : bool
++{
++  global $bb_push;
++  return !empty($bb_push['public']) && !empty($bb_push['private']);
++}
++
++
++function bb_b64u_enc(string $data) : string
++{
++  return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
++}
++
++
++function bb_b64u_dec(string $data) : string
++{
++  return (string) base64_decode(strtr($data, '-_', '+/'), true);
++}
++
++
++// Öffentlicher P-256-Schlüssel (65 Bytes, 0x04|x|y) als PEM
++function bb_push_pem_public(string $punkt) : string
++{
++  $der = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200') . $punkt;
++  return "-----BEGIN PUBLIC KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END PUBLIC KEY-----\n";
++}
++
++
++// Privater P-256-Schlüssel (d, 32 Bytes) mit zugehörigem öffentlichen Punkt als PEM
++function bb_push_pem_private(string $d, string $punkt) : string
++{
++  $der = hex2bin('30770201010420') . $d . hex2bin('a00a06082a8648ce3d030107a144034200') . $punkt;
++  return "-----BEGIN EC PRIVATE KEY-----\n" . chunk_split(base64_encode($der), 64, "\n") . "-----END EC PRIVATE KEY-----\n";
++}
++
++
++// Neues Schlüsselpaar: ['d' => 32 Bytes, 'punkt' => 65 Bytes, 'key' => OpenSSLAsymmetricKey]
++function bb_push_schluesselpaar() : array
++{
++  $key = openssl_pkey_new(['curve_name' => 'prime256v1', 'private_key_type' => OPENSSL_KEYTYPE_EC]);
++  if ($key === false)
++  {
++    throw new \Exception('openssl_pkey_new fehlgeschlagen');
++  }
++  $ec = openssl_pkey_get_details($key)['ec'];
++  $pad = function (string $s) : string { return str_pad($s, 32, "\0", STR_PAD_LEFT); };
++  return ['d' => $pad($ec['d']), 'punkt' => "\x04" . $pad($ec['x']) . $pad($ec['y']), 'key' => $key];
++}
++
++
++// ECDSA-Signatur von DER (openssl) in das JWT-Format r|s umwandeln
++function bb_push_sig_raw(string $der) : string
++{
++  $pos = 2;
++  if (ord($der[1]) & 0x80)
++  {
++    $pos += ord($der[1]) & 0x7f;
++  }
++  $teile = [];
++  for ($i = 0; $i < 2; $i++)
++  {
++    $len = ord($der[$pos + 1]);
++    $teile[] = str_pad(ltrim(substr($der, $pos + 2, $len), "\0"), 32, "\0", STR_PAD_LEFT);
++    $pos += 2 + $len;
++  }
++  return $teile[0] . $teile[1];
++}
++
++
++// Authorization-Header nach RFC 8292
++function bb_push_vapid(string $endpoint) : string
++{
++  global $bb_push;
++
++  $teile  = parse_url($endpoint);
++  $public = bb_b64u_dec($bb_push['public']);
++  $jwt = bb_b64u_enc(json_encode(['typ' => 'JWT', 'alg' => 'ES256'])) . '.' .
++         bb_b64u_enc(json_encode([
++           'aud' => $teile['scheme'] . '://' . $teile['host'],
++           'exp' => time() + 12 * 3600,
++           'sub' => $bb_push['subject'] ?? 'mailto:admin@example.org'
++         ], JSON_UNESCAPED_SLASHES));
++  $key = openssl_pkey_get_private(bb_push_pem_private(bb_b64u_dec($bb_push['private']), $public));
++  if ($key === false || !openssl_sign($jwt, $sig, $key, OPENSSL_ALGO_SHA256))
++  {
++    throw new \Exception('VAPID-Signatur fehlgeschlagen – Schlüssel in $bb_push prüfen');
++  }
++  return 'vapid t=' . $jwt . '.' . bb_b64u_enc(bb_push_sig_raw($sig)) . ', k=' . $bb_push['public'];
++}
++
++
++// Nachricht verschlüsseln (RFC 8291, aes128gcm, ein Datensatz)
++function bb_push_verschluesseln(string $text, string $ua_public, string $auth_secret) : string
++{
++  $as = bb_push_schluesselpaar();
++  $ecdh = openssl_pkey_derive(bb_push_pem_public($ua_public), $as['key'], 32);
++  if ($ecdh === false)
++  {
++    throw new \Exception('ECDH fehlgeschlagen – ungültiger Schlüssel des Geräts');
++  }
++  $salt = random_bytes(16);
++
++  $prk_key = hash_hmac('sha256', $ecdh, $auth_secret, true);
++  $ikm     = hash_hmac('sha256', "WebPush: info\0" . $ua_public . $as['punkt'] . "\x01", $prk_key, true);
++  $prk     = hash_hmac('sha256', $ikm, $salt, true);
++  $cek     = substr(hash_hmac('sha256', "Content-Encoding: aes128gcm\0\x01", $prk, true), 0, 16);
++  $nonce   = substr(hash_hmac('sha256', "Content-Encoding: nonce\0\x01", $prk, true), 0, 12);
++
++  $tag = '';
++  $chiffre = openssl_encrypt($text . "\x02", 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, $tag, '', 16);
++  return $salt . pack('N', 4096) . chr(65) . $as['punkt'] . $chiffre . $tag;
++}
++
++
++// Eine Nachricht an ein Gerät schicken. Ergebnis: HTTP-Status (0 = keine Verbindung)
++function bb_push_senden(array $abo, array $nachricht) : int
++{
++  if (!preg_match(BB_PUSH_HOSTS, (string) parse_url($abo['endpoint'], PHP_URL_HOST)) &&
++      !bb_push_host_extra($abo['endpoint']))
++  {
++    return 0;
++  }
++
++  $body = bb_push_verschluesseln(
++    json_encode($nachricht, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
++    bb_b64u_dec($abo['p256dh']),
++    bb_b64u_dec($abo['auth'])
++  );
++
++  $context = stream_context_create(['http' => [
++    'method'        => 'POST',
++    'header'        => implode("\r\n", [
++      'Authorization: ' . bb_push_vapid($abo['endpoint']),
++      'Content-Type: application/octet-stream',
++      'Content-Encoding: aes128gcm',
++      'Content-Length: ' . strlen($body),
++      'TTL: 86400',            // bis zu einem Tag zustellen, falls das Handy aus ist
++      'Urgency: high'
++    ]),
++    'content'       => $body,
++    'timeout'       => 5,
++    'ignore_errors' => true    // auch bei 4xx die Antwort lesen
++  ]]);
++  $http_response_header = [];
++  @file_get_contents($abo['endpoint'], false, $context);
++  if (empty($http_response_header) || !preg_match('#^HTTP/\S+\s+(\d{3})#', $http_response_header[0], $m))
++  {
++    return 0;
++  }
++  return (int) $m[1];
++}
++
++
++// Nur fürs Testsystem: zusätzliche Push-Server aus $bb_push['hosts_extra']
++function bb_push_host_extra(string $endpoint) : bool
++{
++  global $bb_push;
++  foreach ($bb_push['hosts_extra'] ?? [] as $prefix)
++  {
++    if (strpos($endpoint, $prefix) === 0)
++    {
++      return true;
++    }
++  }
++  return false;
++}
++
++
++// An alle Geräte eines Mitglieds. Ergebnis: Zahl der zugestellten Nachrichten.
++// Abgelaufene Anmeldungen (404/410) werden gelöscht.
++function bb_push_an_benutzer(string $username, array $nachricht) : int
++{
++  if (!bb_push_aktiv())
++  {
++    return 0;
++  }
++  $ok = 0;
++  try
++  {
++    $res = db()->query("SELECT id, endpoint, p256dh, auth FROM " . _tbl('bb_push') . " WHERE username=?", [$username]);
++    $abos = [];
++    while (false !== ($row = $res->next_row_keyed()))
++    {
++      $abos[] = $row;
++    }
++  }
++  catch (\Throwable $e)
++  {
++    return 0;   // Tabelle fehlt (push.sql nicht eingespielt)
++  }
++
++  foreach ($abos as $abo)
++  {
++    try
++    {
++      $status = bb_push_senden($abo, $nachricht);
++    }
++    catch (\Throwable $e)
++    {
++      trigger_error('Push an ' . $username . ' fehlgeschlagen: ' . $e->getMessage(), E_USER_NOTICE);
++      continue;
++    }
++    if ($status >= 200 && $status < 300)
++    {
++      $ok++;
++      db()->command("UPDATE " . _tbl('bb_push') . " SET last_used=? WHERE id=?", [time(), (int) $abo['id']]);
++    }
++    elseif ($status === 404 || $status === 410)
++    {
++      db()->command("DELETE FROM " . _tbl('bb_push') . " WHERE id=?", [(int) $abo['id']]);
++    }
++    else
++    {
++      trigger_error("Push an $username: Push-Dienst antwortet $status", E_USER_NOTICE);
++    }
++  }
++  return $ok;
++}
++
++
++// Aus einer Mail eine kurze Push-Nachricht machen
++function bb_push_aus_mail(string $subject, string $text_body) : array
++{
++  // Ohne Link öffnet der Tipp auf die Nachricht die Startseite (sw.php)
++  $url = '';
++  if (preg_match('#https?://\S+#', $text_body, $m))
++  {
++    $url = $m[0];
++  }
++  $zeilen = [];
++  foreach (preg_split('/\R/', $text_body) as $zeile)
++  {
++    $zeile = trim(preg_replace('/\s+/u', ' ', $zeile));
++    if ($zeile === '' || preg_match('/^[-=_*]{3,}$/', $zeile) || preg_match('#https?://#', $zeile))
++    {
++      continue;
++    }
++    $zeilen[] = $zeile;
++    if (count($zeilen) >= 4)
++    {
++      break;
++    }
++  }
++  $body = implode("\n", $zeilen);
++  if (mb_strlen($body) > 240)
++  {
++    $body = mb_substr($body, 0, 239) . '…';
++  }
++  return ['title' => $subject, 'body' => $body, 'url' => $url];
++}
++
++
++// Hook aus MailQueue::add(): Push an alle Empfänger mit App schicken und
++// Empfänger mit „keine Mails mehr“ aus der Mail nehmen (wenn zugestellt).
++function bb_push_zu_mail(array $addresses, string $subject, string $text_body) : array
++{
++  if (!bb_push_aktiv())
++  {
++    return $addresses;
++  }
++
++  $nachricht = null;
++  foreach (['to', 'cc', 'bcc'] as $feld)
++  {
++    if (empty($addresses[$feld]))
++    {
++      continue;
++    }
++    $behalten = [];
++    $entfernt = false;
++    foreach (parse_addresses($addresses[$feld]) as $adresse)
++    {
++      $nur_push = false;
++      $zugestellt = 0;
++      try
++      {
++        $res = db()->query("SELECT name, nur_push FROM " . _tbl('users') . " WHERE LOWER(email)=LOWER(?)",
++                           [$adresse['address']]);
++        while (false !== ($row = $res->next_row_keyed()))
++        {
++          $nachricht = $nachricht ?? bb_push_aus_mail($subject, $text_body);
++          $n = bb_push_an_benutzer($row['name'], $nachricht);
++          $zugestellt += $n;
++          if ($n > 0 && !empty($row['nur_push']))
++          {
++            $nur_push = true;
++          }
++        }
++      }
++      catch (\Throwable $e)
++      {
++        // Spalte nur_push fehlt o. ä. – Mail geht normal raus
++      }
++
++      if ($nur_push && $zugestellt > 0)
++      {
++        $entfernt = true;
++        continue;
++      }
++      $behalten[] = ($adresse['name'] !== '')
++                      ? '"' . str_replace('"', '', $adresse['name']) . '" <' . $adresse['address'] . '>'
++                      : $adresse['address'];
++    }
++    if ($entfernt)
++    {
++      $addresses[$feld] = implode(', ', $behalten);
++    }
++  }
++  return $addresses;
++}

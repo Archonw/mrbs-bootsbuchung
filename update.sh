@@ -97,5 +97,43 @@ for f in sql/*.sql; do
   docker exec -i mrbs_db sh -c 'mariadb -h127.0.0.1 -umrbs -p"$MARIADB_PASSWORD" mrbs' < "$f"
 done
 
+# Einstellungen für App und Push nachtragen, falls sie in einer älteren
+# config.inc.php noch fehlen (wird nur einmal ergänzt, nie überschrieben)
+CONF=config/config.inc.php
+if [ -f "$CONF" ] && grep -qE '^\s*\?>' "$CONF"; then
+  echo "    Hinweis: $CONF endet mit '?>' – App-Einstellungen bitte von Hand ergänzen (siehe README, Abschnitt App)."
+elif [ -f "$CONF" ]; then
+  ERGAENZT=0
+  if ! grep -q 'cookie_samesite_lax' "$CONF"; then
+    cat >> "$CONF" <<'PHP'
+
+// --- App: angemeldet bleiben, auch beim Öffnen aus App, Mail oder Push (ergänzt von update.sh) ---
+$cookie_samesite_lax = true;
+PHP
+    ERGAENZT=1
+  fi
+  if ! grep -q 'users.nur_push' "$CONF"; then
+    cat >> "$CONF" <<'PHP'
+
+// --- Push-Benachrichtigungen (ergänzt von update.sh) ---
+$vocab_override['de']['users.nur_push'] = 'Nur Push, keine Mails';
+PHP
+    ERGAENZT=1
+  fi
+  if ! grep -q '\$bb_push' "$CONF"; then
+    BB_URL=$(grep -E '^BB_URL=' .env 2>/dev/null | cut -d= -f2- || true)
+    if SCHLUESSEL=$(docker exec -i -e BB_PUSH_SUBJECT="$BB_URL" mrbs php < tools/push-schluessel.php); then
+      printf '\n%s\n' "$SCHLUESSEL" >> "$CONF"
+      ERGAENZT=1
+    else
+      echo "    Hinweis: Push-Schlüssel konnte nicht erzeugt werden – siehe README, Abschnitt Push."
+    fi
+  fi
+  if [ "$ERGAENZT" = 1 ]; then
+    echo "==> App- und Push-Einstellungen in $CONF ergänzt"
+    docker compose restart mrbs >/dev/null
+  fi
+fi
+
 echo "==> Fertig: MRBS $VERSION läuft (PHP $(docker exec mrbs php -r 'echo PHP_VERSION;' 2>/dev/null || echo unbekannt))."
 echo "    Zurück zur vorigen Version:  docker image tag bootsbuchung-mrbs:vorher bootsbuchung-mrbs:latest && docker compose up -d"
