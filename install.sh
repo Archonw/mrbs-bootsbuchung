@@ -445,6 +445,7 @@ Als Nächstes in der Buchung:
     optional Bootsdaten, Infotext und Links zu Unterlagen/Fotoablage)
   - "Benutzerliste" → Mitglieder anlegen, Segellehrern den Haken "Segellehrer" geben,
     wer Boote pflegt, bekommt den Haken "Bootswartung" (Wartungs-Logbuch)
+  - "Verwaltung" → "Buchungszeitraum (Saison)": Saisonbeginn und -ende eintragen
 
 Programmordner: $INSTALL_DIR   (Einstellungen: config/config.inc.php)
 Aktualisieren:  sudo $INSTALL_DIR/update.sh

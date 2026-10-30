@@ -6,6 +6,20 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-10-31 – Saison in der Verwaltung
+
+- **Buchungszeitraum (Saison):** Ab wann und bis wann gebucht werden darf,
+  stellen Admins jetzt unter **Verwaltung → Buchungszeitraum (Saison)** ein,
+  statt `$min_booking_date` / `$max_booking_date` in der `config.inc.php` zu
+  ändern. Gilt sofort, ohne Neustart. Leeres Feld = keine Grenze; Buchungen
+  am ersten und letzten Tag sind erlaubt.
+
+Für bestehende Installationen ist nichts von Hand zu tun. Gespeichert wird
+in der vorhandenen Tabelle `mrbs_variables` (keine neue Spalte). Wer die
+Saison bisher in der `config.inc.php` stehen hat: Die Werte gelten weiter,
+bis zum ersten Mal in der Verwaltung gespeichert wird, danach zählt nur noch
+die Verwaltung.
+
 ## 2026-10-31 – Bootsübersicht, Wartungs-Logbuch, Benutzerliste
 
 - **Bootsübersicht:** Neuer Menüpunkt „Boote“ (am Handy auch unten in der

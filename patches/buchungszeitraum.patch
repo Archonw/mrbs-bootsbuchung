@@ -1,0 +1,301 @@
+diff --git a/web/admin.php b/web/admin.php
+index aa942e9..d335a96 100644
+--- a/web/admin.php
++++ b/web/admin.php
+@@ -320,6 +320,13 @@ if (is_book_admin())
+   $form->render();
+ }
+ 
++// Bootsbuchung-Anpassung (buchungszeitraum.patch): Saisonbeginn und -ende einstellen
++if (is_admin())
++{
++  require_once 'bb_buchungszeitraum.inc';
++  bb_buchungszeitraum_abschnitt();
++}
++
+ echo "<h2>" . get_vocab("administration") . "</h2>\n";
+ if (!empty($error))
+ {
+diff --git a/web/mrbs_sql.inc b/web/mrbs_sql.inc
+index 28ae4dd..65fbb68 100644
+--- a/web/mrbs_sql.inc
++++ b/web/mrbs_sql.inc
+@@ -523,6 +523,10 @@ function mrbsCheckPolicy(array $booking, ?int $ignore_entry_id=null, ?int $ignor
+   global $exempt_types;
+   global $auth;
+ 
++  // Bootsbuchung-Anpassung (buchungszeitraum.patch): Saison aus der Verwaltung
++  require_once 'bb_buchungszeitraum.inc';
++  bb_buchungszeitraum_anwenden();
++
+   $result = array('notices' => array(),
+                   'errors'  => array());
+ 
+diff --git a/web/bb_buchungszeitraum.inc b/web/bb_buchungszeitraum.inc
+new file mode 100644
+index 0000000..1d62155
+--- /dev/null
++++ b/web/bb_buchungszeitraum.inc
+@@ -0,0 +1,217 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\ElementFieldset;
++use MRBS\Form\ElementInputSubmit;
++use MRBS\Form\FieldDiv;
++use MRBS\Form\FieldInputDate;
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Buchungszeitraum (Saison) in der Verwaltung einstellen
++//
++// Saisonbeginn und -ende (ab/bis wann gebucht werden darf) stellen Admins
++// auf der Seite "Verwaltung" (admin.php) ein. Gespeichert wird in der
++// MRBS-Tabelle mrbs_variables unter dem Namen 'bb_buchungszeitraum' als
++// JSON {"beginn": "JJJJ-MM-TT" oder "", "ende": …}, leer = keine Grenze.
++// Eine neue Spalte oder Tabelle ist nicht nötig.
++//
++// Solange dort nichts gespeichert wurde, gelten wie bisher
++// $min_booking_date(_enabled) und $max_booking_date(_enabled) aus der
++// config.inc.php. Nach dem ersten Speichern gilt nur noch die Verwaltung.
++//
++// Geprüft wird an derselben Stelle wie bei MRBS selbst (mrbsCheckPolicy in
++// mrbs_sql.inc): dort setzt bb_buchungszeitraum_anwenden() die Werte.
++// =============================================================================
++
++const BB_BUCHUNGSZEITRAUM_VAR = 'bb_buchungszeitraum';
++
++
++function bb_datum_ok(string $datum) : bool
++{
++  $d = \DateTime::createFromFormat('!Y-m-d', $datum);
++  return ($d !== false) && ($d->format('Y-m-d') === $datum);
++}
++
++
++// Gespeicherter Zeitraum aus der Datenbank, null = noch nie gespeichert
++function bb_buchungszeitraum_gespeichert() : ?array
++{
++  static $zeitraum = false;
++
++  if ($zeitraum === false)
++  {
++    $zeitraum = null;
++    try
++    {
++      $res = db()->query_array("SELECT variable_content
++                                  FROM " . _tbl('variables') . "
++                                 WHERE variable_name=?
++                                 LIMIT 1", [BB_BUCHUNGSZEITRAUM_VAR]);
++      if (count($res) > 0)
++      {
++        $daten = json_decode((string) $res[0], true);
++        if (is_array($daten))
++        {
++          $zeitraum = [];
++          foreach (['beginn', 'ende'] as $k)
++          {
++            $v = (string) ($daten[$k] ?? '');
++            $zeitraum[$k] = bb_datum_ok($v) ? $v : '';
++          }
++        }
++      }
++    }
++    catch (\Throwable $e)
++    {
++      // Im Zweifel bleibt es bei der config.inc.php
++      trigger_error('Buchungszeitraum nicht lesbar: ' . $e->getMessage(), E_USER_WARNING);
++    }
++  }
++
++  return $zeitraum;
++}
++
++
++// Der Zeitraum, der gerade gilt: ['beginn' => …, 'ende' => …, 'quelle' => 'verwaltung'|'config']
++function bb_buchungszeitraum() : array
++{
++  global $min_booking_date_enabled, $min_booking_date, $max_booking_date_enabled, $max_booking_date;
++
++  $gespeichert = bb_buchungszeitraum_gespeichert();
++  if (isset($gespeichert))
++  {
++    return $gespeichert + ['quelle' => 'verwaltung'];
++  }
++
++  return [
++    'beginn' => ($min_booking_date_enabled ?? false) ? (string) $min_booking_date : '',
++    'ende'   => ($max_booking_date_enabled ?? false) ? (string) $max_booking_date : '',
++    'quelle' => 'config'
++  ];
++}
++
++
++// Überschreibt die MRBS-Einstellungen mit dem Zeitraum aus der Verwaltung
++function bb_buchungszeitraum_anwenden() : void
++{
++  global $min_booking_date_enabled, $min_booking_date, $max_booking_date_enabled, $max_booking_date;
++
++  $gespeichert = bb_buchungszeitraum_gespeichert();
++  if (!isset($gespeichert))
++  {
++    return;
++  }
++
++  $min_booking_date_enabled = ($gespeichert['beginn'] !== '');
++  if ($min_booking_date_enabled)
++  {
++    $min_booking_date = $gespeichert['beginn'];
++  }
++  $max_booking_date_enabled = ($gespeichert['ende'] !== '');
++  if ($max_booking_date_enabled)
++  {
++    $max_booking_date = $gespeichert['ende'];
++  }
++}
++
++
++function bb_buchungszeitraum_speichern(string $beginn, string $ende) : void
++{
++  $sql_params = [];
++  $data = [
++    'variable_name'    => BB_BUCHUNGSZEITRAUM_VAR,
++    'variable_content' => json_encode(['beginn' => $beginn, 'ende' => $ende])
++  ];
++  $sql = db()->syntax_upsert($data, _tbl('variables'), $sql_params, 'variable_name', ['id'], true);
++  db()->command($sql, $sql_params);
++}
++
++
++function bb_datum_lang(string $datum) : string
++{
++  global $datetime_formats;
++
++  $d = \DateTime::createFromFormat('!Y-m-d', $datum);
++  return datetime_format($datetime_formats['date'], $d->getTimestamp());
++}
++
++
++// Abschnitt "Buchungszeitraum (Saison)" auf der Seite Verwaltung
++function bb_buchungszeitraum_abschnitt() : void
++{
++  $z = bb_buchungszeitraum();
++
++  echo "<h2>Buchungszeitraum (Saison)</h2>\n";
++  echo "<div id=\"bb_buchungszeitraum\">\n";
++
++  $status = get_form_var('bz', 'string');
++  if ($status === 'ok')
++  {
++    echo "<p class=\"bb-bz-ok\">Gespeichert.</p>\n";
++  }
++  elseif ($status === 'reihenfolge')
++  {
++    echo "<p class=\"error\">Nicht gespeichert: Das Saisonende liegt vor dem Saisonbeginn.</p>\n";
++  }
++  elseif ($status === 'datum')
++  {
++    echo "<p class=\"error\">Nicht gespeichert: Ungültiges Datum.</p>\n";
++  }
++
++  if (($z['beginn'] === '') && ($z['ende'] === ''))
++  {
++    $text = 'Derzeit gibt es keine Grenze, gebucht werden kann jederzeit.';
++  }
++  elseif ($z['ende'] === '')
++  {
++    $text = 'Derzeit buchbar ab ' . bb_datum_lang($z['beginn']) . '.';
++  }
++  elseif ($z['beginn'] === '')
++  {
++    $text = 'Derzeit buchbar bis einschließlich ' . bb_datum_lang($z['ende']) . '.';
++  }
++  else
++  {
++    $text = 'Derzeit buchbar vom ' . bb_datum_lang($z['beginn']) .
++            ' bis einschließlich ' . bb_datum_lang($z['ende']) . '.';
++  }
++  echo '<p>' . escape_html($text);
++  if ($z['quelle'] === 'config')
++  {
++    echo ' <span class="bb-bz-quelle">(Wert aus der config.inc.php, gilt bis zum ersten Speichern hier.)</span>';
++  }
++  echo "</p>\n";
++  echo "<p>Leeres Feld = keine Grenze. Buchungen am ersten und letzten Tag sind erlaubt.</p>\n";
++
++  $form = new Form(Form::METHOD_POST);
++  $form->setAttributes([
++      'class'  => 'standard',
++      'id'     => 'bb_buchungszeitraum_form',
++      'action' => multisite('bb_buchungszeitraum.php')
++    ]);
++
++  $beginn = new FieldInputDate();
++  $beginn->setLabel('Saisonbeginn')
++         ->setControlAttributes(['name' => 'saison_beginn', 'value' => $z['beginn']]);
++  $ende = new FieldInputDate();
++  $ende->setLabel('Saisonende')
++       ->setControlAttributes(['name' => 'saison_ende', 'value' => $z['ende']]);
++
++  $submit = new ElementInputSubmit();
++  $submit->setAttributes(['class' => 'default_action', 'value' => get_vocab('save')]);
++  $knopf = new FieldDiv();
++  $knopf->setAttribute('class', 'submit_buttons')
++        ->addLabelClass('no_suffix')
++        ->addControlElement($submit);
++
++  $fieldset = new ElementFieldset();
++  $fieldset->addElement($beginn)
++           ->addElement($ende)
++           ->addElement($knopf);
++  $form->addElement($fieldset)
++       ->render();
++
++  echo "</div>\n";
++}
+diff --git a/web/bb_buchungszeitraum.php b/web/bb_buchungszeitraum.php
+new file mode 100644
+index 0000000..983a66f
+--- /dev/null
++++ b/web/bb_buchungszeitraum.php
+@@ -0,0 +1,39 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Buchungszeitraum (Saison) speichern
++//
++// Ziel des Formulars "Buchungszeitraum (Saison)" auf der Seite Verwaltung
++// (admin.php, siehe bb_buchungszeitraum.inc). Nur für Admins: die Seite
++// steht nicht in get_page_level() und fällt damit unter "nur Admins".
++// =============================================================================
++
++require 'defaultincludes.inc';
++require_once 'bb_buchungszeitraum.inc';
++
++Form::checkToken();
++checkAuthorised(this_page());
++
++$beginn = trim((string) get_form_var('saison_beginn', 'string', ''));
++$ende   = trim((string) get_form_var('saison_ende', 'string', ''));
++
++if ((($beginn !== '') && !bb_datum_ok($beginn)) ||
++    (($ende !== '') && !bb_datum_ok($ende)))
++{
++  $status = 'datum';
++}
++elseif (($beginn !== '') && ($ende !== '') && ($ende < $beginn))
++{
++  $status = 'reihenfolge';
++}
++else
++{
++  bb_buchungszeitraum_speichern($beginn, $ende);
++  $status = 'ok';
++}
++
++location_header('admin.php?bz=' . $status . '#bb_buchungszeitraum');
