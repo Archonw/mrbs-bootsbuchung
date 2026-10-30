@@ -1,0 +1,443 @@
+diff --git a/web/edit_entry.php b/web/edit_entry.php
+index ff3a9ed..0b6c142 100644
+--- a/web/edit_entry.php
++++ b/web/edit_entry.php
+@@ -1761,6 +1761,12 @@ foreach ($edit_entry_field_order as $key)
+ 
+     case 'description':
+       $fieldset->addElement(get_field_description($description, $area_id));
++      // Bootsbuchung-Anpassung: Link zum Hochladen von Schadensfotos (Nextcloud)
++      require_once 'bb_unterlagen.inc';
++      // (Ablage des vorausgewählten Bootes; beim Hochladen aus dem Formular
++      // nimmt theme.js das gerade gewählte Boot)
++      // Nur für die eigene Buchung
++      $fieldset->addElement(bb_fotos_field(empty($selected_rooms) ? null : (int) reset($selected_rooms), $create_by));
+       break;
+ 
+     case 'start_time':
+diff --git a/web/bb_bootswart.inc b/web/bb_bootswart.inc
+index 38763e2..6b0d875 100644
+--- a/web/bb_bootswart.inc
++++ b/web/bb_bootswart.inc
+@@ -104,6 +104,13 @@ function bb_notify_bootswart(array $booking, ?array $previous) : void
+   }
+   $lines[] = '';
+   $lines[] = 'Buchung ansehen: ' . $url;
++  // Bootsbuchung-Anpassung (unterlagen.patch): Ablage für Schadensfotos
++  require_once 'bb_unterlagen.inc';
++  $fotos = bb_fotos_mail_zeile((int) $booking['room_id']);
++  if (isset($fotos))
++  {
++    $lines[] = $fotos;
++  }
+   $body = implode(MAIL_EOL, $lines) . MAIL_EOL;
+ 
+   // Antworten gehen direkt an den, der gemeldet hat
+diff --git a/web/bb_fotos.php b/web/bb_fotos.php
+new file mode 100644
+index 0000000..41e8415
+--- /dev/null
++++ b/web/bb_fotos.php
+@@ -0,0 +1,186 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Schadensfotos direkt aus MRBS in die Nextcloud hochladen
++//
++// theme.js schickt jede Datei in Stücken (je ca. 1,5 MB, passt zu den
++// PHP-Grenzen upload_max_filesize = 2 MB / post_max_size = 8 MB). Die Stücke
++// werden hier in einer temporären Datei gesammelt, nach dem letzten Stück
++// geht die ganze Datei per WebDAV in die Fotoablage des Bootes
++// (Nextcloud-Freigabe "Dateiablage", siehe bb_unterlagen.inc).
++//
++// POST (multipart), Antwort JSON:
++//   room    Boot (mrbs_room.id), bestimmt die Fotoablage
++//   id      zufällige Kennung der Datei (16–32 Zeichen a-z0-9)
++//   name    ursprünglicher Dateiname (nur für die Endung)
++//   offset  Position des Stücks in der Datei
++//   size    Gesamtgröße der Datei
++//   teil    das Stück
++//   nr      laufende Nummer der Datei in diesem Durchgang (für den Namen)
++// =============================================================================
++
++require "defaultincludes.inc";
++require_once "bb_unterlagen.inc";
++
++const BB_FOTOS_MAX = 300 * 1024 * 1024;   // größte Datei (Videos)
++
++checkAuthorised('search.php');
++
++header('Content-Type: application/json; charset=utf-8');
++header('Cache-Control: no-store');
++
++function bb_fotos_antwort(int $status, array $daten) : void
++{
++  http_response_code($status);
++  echo json_encode($daten);
++  exit;
++}
++
++if ($server['REQUEST_METHOD'] !== 'POST')
++{
++  bb_fotos_antwort(405, ['fehler' => 'Nur POST.']);
++}
++Form::checkToken();
++
++$mrbs_user = session()->getCurrentUser();
++if (!isset($mrbs_user))
++{
++  bb_fotos_antwort(403, ['fehler' => 'Bitte zuerst anmelden.']);
++}
++
++$room_id = (int) get_form_var('room', 'int');
++$id      = (string) get_form_var('id', 'string');
++$name    = (string) get_form_var('name', 'string');
++$offset  = (int) get_form_var('offset', 'int');
++$size    = (int) get_form_var('size', 'int');
++$nr      = max(1, (int) get_form_var('nr', 'int'));
++
++$share = bb_nextcloud_share(bb_fotos_url($room_id ?: null));
++if ($share === null)
++{
++  bb_fotos_antwort(400, ['fehler' => 'Für dieses Boot ist keine Fotoablage eingetragen.']);
++}
++if (!preg_match('/^[a-z0-9]{16,32}$/', $id) || $size <= 0 || $offset < 0 || $offset >= $size)
++{
++  bb_fotos_antwort(400, ['fehler' => 'Ungültige Anfrage.']);
++}
++if ($size > BB_FOTOS_MAX)
++{
++  bb_fotos_antwort(413, ['fehler' => 'Die Datei ist zu groß (höchstens ' . (BB_FOTOS_MAX >> 20) . ' MB).']);
++}
++$teil = $_FILES['teil'] ?? null;
++if (!isset($teil) || ($teil['error'] ?? 1) !== UPLOAD_ERR_OK || !is_uploaded_file($teil['tmp_name']))
++{
++  bb_fotos_antwort(400, ['fehler' => 'Das Stück ist nicht angekommen.']);
++}
++
++// Liegengebliebene Reste abgebrochener Uploads aufräumen
++$tmp_dir = sys_get_temp_dir();
++foreach (glob("$tmp_dir/bb_fotos_*.part") ?: [] as $alt)
++{
++  if (@filemtime($alt) < time() - 86400)
++  {
++    @unlink($alt);
++  }
++}
++
++// Stück anhängen. Stimmt die Position nicht (z. B. Netz kurz weg und das
++// Stück kam doppelt), sagt die Antwort, wo es weitergeht.
++$tmp = "$tmp_dir/bb_fotos_" . sha1($mrbs_user->username . '|' . $id) . '.part';
++clearstatcache();
++$bisher = is_file($tmp) ? filesize($tmp) : 0;
++if ($offset !== $bisher)
++{
++  bb_fotos_antwort(409, ['weiter' => $bisher]);
++}
++if ($bisher + filesize($teil['tmp_name']) > $size)
++{
++  @unlink($tmp);
++  bb_fotos_antwort(400, ['fehler' => 'Die Datei ist größer als angekündigt.']);
++}
++if (file_put_contents($tmp, file_get_contents($teil['tmp_name']), FILE_APPEND | LOCK_EX) === false)
++{
++  bb_fotos_antwort(500, ['fehler' => 'Auf dem Server ist kein Platz.']);
++}
++clearstatcache();
++$bisher = filesize($tmp);
++if ($bisher < $size)
++{
++  bb_fotos_antwort(200, ['weiter' => $bisher]);
++}
++
++// Datei vollständig: nur Fotos und Videos
++$typ = (new \finfo(FILEINFO_MIME_TYPE))->file($tmp) ?: '';
++if (!preg_match('#^(image|video)/#', $typ))
++{
++  @unlink($tmp);
++  bb_fotos_antwort(415, ['fehler' => 'Nur Fotos und Videos.']);
++}
++
++// Name in der Ablage: Datum_Uhrzeit_Boot_Mitglied_Nr.endung
++$room_row  = db()->query("SELECT room_name FROM " . _tbl('room') . " WHERE id=? LIMIT 1", [$room_id])->next_row_keyed();
++$room_name = (string) ($room_row['room_name'] ?? '');
++$sauber = function (string $s) : string {
++  $s = preg_replace('/[^\p{L}\p{N}]+/u', '-', $s);
++  return trim(mb_substr($s, 0, 40), '-');
++};
++$endung = strtolower(pathinfo($name, PATHINFO_EXTENSION));
++if (!preg_match('/^[a-z0-9]{1,5}$/', $endung))
++{
++  $endung = explode('/', $typ)[1] ?? 'bin';
++}
++$ziel = implode('_', array_filter([
++  date('Y-m-d_H-i'),
++  $sauber($room_name),
++  $sauber($mrbs_user->display_name ?? $mrbs_user->username),
++  sprintf('%02d', $nr),
++])) . '.' . $endung;
++
++// An die Nextcloud-Freigabe schicken. Neuere Nextcloud: public.php/dav/files/<token>,
++// ältere: public.php/webdav mit dem Token als Benutzername.
++function bb_fotos_put(string $url, string $datei, string $typ, ?string $userpwd) : int
++{
++  $fh = fopen($datei, 'rb');
++  $ch = curl_init($url);
++  curl_setopt_array($ch, [
++    CURLOPT_PUT            => true,
++    CURLOPT_INFILE         => $fh,
++    CURLOPT_INFILESIZE     => filesize($datei),
++    CURLOPT_HTTPHEADER     => ["Content-Type: $typ", 'X-Requested-With: XMLHttpRequest'],
++    CURLOPT_RETURNTRANSFER => true,
++    CURLOPT_CONNECTTIMEOUT => 15,
++    CURLOPT_TIMEOUT        => 600,
++  ]);
++  if (isset($userpwd))
++  {
++    curl_setopt($ch, CURLOPT_USERPWD, $userpwd);
++  }
++  curl_exec($ch);
++  $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
++  curl_close($ch);
++  fclose($fh);
++
++  return $status;
++}
++
++@set_time_limit(660);
++$status = bb_fotos_put($share['base'] . '/public.php/dav/files/' . rawurlencode($share['token']) . '/' . rawurlencode($ziel),
++                        $tmp, $typ, null);
++if (!in_array($status, [200, 201, 204]))
++{
++  $status = bb_fotos_put($share['base'] . '/public.php/webdav/' . rawurlencode($ziel),
++                          $tmp, $typ, $share['token'] . ':');
++}
++@unlink($tmp);
++
++if (!in_array($status, [200, 201, 204]))
++{
++  trigger_error("bb_fotos: Nextcloud antwortet $status für $ziel", E_USER_NOTICE);
++  bb_fotos_antwort(502, ['fehler' => 'Die Nextcloud hat die Datei nicht angenommen.']);
++}
++
++bb_fotos_antwort(200, ['ok' => true, 'datei' => $ziel, 'boot' => $room_name]);
+diff --git a/web/bb_unterlagen.inc b/web/bb_unterlagen.inc
+new file mode 100644
+index 0000000..a80ab57
+--- /dev/null
++++ b/web/bb_unterlagen.inc
+@@ -0,0 +1,196 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\ElementA;
++use MRBS\Form\FieldDiv;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Links in die Vereins-Nextcloud
++//
++// Die Dateien bleiben in der Nextcloud, MRBS zeigt nur Links an:
++//
++//   - Bootsunterlagen (Handbuch, Checklisten, …): Freigabelink pro Boot im
++//     Feld "Unterlagen" (Boot bearbeiten). Spalte mrbs_room.unterlagen,
++//     angelegt mit sql/unterlagen.sql.
++//   - Schadensfotos: Ablage pro Boot im Feld "Fotoablage (Link)" (Spalte
++//     mrbs_room.fotos, ebenfalls aus sql/unterlagen.sql), damit klar ist, zu
++//     welchem Boot ein Foto gehört. Ist das Feld leer, gilt der gemeinsame
++//     Link aus der config.inc.php:
++//       $bb_fotos_url = 'https://…/s/…';
++//     Jeweils eine Nextcloud-Freigabe "Dateiablage" (nur hochladen).
++//
++// Angezeigt in der Buchungsansicht (view_entry.php), der Fotolink zusätzlich
++// unter "Gibt es etwas zu melden?" im Buchungsformular und in der Mail an den
++// Bootswart. Ist nichts eingetragen, erscheint nichts. Den Fotolink in
++// Formular und Buchungsansicht sieht nur, wer die Buchung angelegt hat.
++//
++// Ist die Fotoablage eine Nextcloud-Freigabe (…/s/<token>), lädt das Theme
++// (theme.js) die Fotos direkt aus MRBS hoch: Tippen auf den Link öffnet die
++// Auswahl des Handys (Kamera, Video, Dateien), bb_fotos.php reicht die
++// Dateien an die Freigabe weiter. Ohne das Theme bleibt es ein normaler Link.
++// =============================================================================
++
++// Nur http(s)-Links, damit im Feld kein "javascript:" o. Ä. landet.
++function bb_link_ok(?string $url) : bool
++{
++  return isset($url) && preg_match('#^https?://\S+$#i', trim($url));
++}
++
++
++// Link aus einer Zusatzspalte des Bootes (unterlagen, fotos)
++function bb_room_link(?int $room_id, string $column) : ?string
++{
++  if (empty($room_id) || !db()->field_exists(_tbl('room'), $column))
++  {
++    return null;
++  }
++  $sql = "SELECT $column FROM " . _tbl('room') . " WHERE id=? LIMIT 1";
++  $row = db()->query($sql, [$room_id])->next_row_keyed();
++  $url = $row[$column] ?? null;
++
++  return bb_link_ok($url) ? trim($url) : null;
++}
++
++
++// Fotoablage des Bootes, sonst der gemeinsame Link aus der config.inc.php
++function bb_fotos_url(?int $room_id=null) : ?string
++{
++  global $bb_fotos_url;
++
++  $url = bb_room_link($room_id, 'fotos');
++  if (isset($url))
++  {
++    return $url;
++  }
++
++  return bb_link_ok($bb_fotos_url ?? null) ? trim($bb_fotos_url) : null;
++}
++
++
++// Ordner mit den Schadensfotos eines Bootes in der Nextcloud zum Ansehen
++// (die Fotoablage selbst ist nur zum Hochladen freigegeben). Vorlage aus der
++// config.inc.php, {boot} wird durch den Bootsnamen ersetzt:
++//   $bb_fotos_ordner_url = 'https://cloud…/apps/files/?dir=/Boote-Service/Schadensfotos/{boot}';
++// Der Link funktioniert nur für Nextcloud-Konten, mit denen der Ordner geteilt ist.
++function bb_fotos_ordner_url(int $room_id) : ?string
++{
++  global $bb_fotos_ordner_url;
++
++  if (!bb_link_ok($bb_fotos_ordner_url ?? null))
++  {
++    return null;
++  }
++  $boot = db()->query("SELECT room_name FROM " . _tbl('room') . " WHERE id=? LIMIT 1", [$room_id])->next_row_keyed();
++  if (empty($boot))
++  {
++    return null;
++  }
++
++  return str_replace('{boot}', rawurlencode((string) $boot['room_name']), trim($bb_fotos_ordner_url));
++}
++
++
++// Zeile für Mails an Bootswart/Boot-Paten: der Ordner zum Ansehen, sonst die Fotoablage
++function bb_fotos_mail_zeile(int $room_id) : ?string
++{
++  $ordner = bb_fotos_ordner_url($room_id);
++  if (isset($ordner))
++  {
++    return 'Fotos in der Nextcloud: ' . $ordner;
++  }
++  $fotos = bb_fotos_url($room_id);
++
++  return isset($fotos) ? 'Fotos ggf. hier: ' . $fotos : null;
++}
++
++
++function bb_unterlagen_url(int $room_id) : ?string
++{
++  return bb_room_link($room_id, 'unterlagen');
++}
++
++
++// Nextcloud-Freigabelink zerlegen: ['base' => 'https://cloud…', 'token' => '…']
++function bb_nextcloud_share(?string $url) : ?array
++{
++  if (!bb_link_ok($url) ||
++      !preg_match('#^(https?://[^?\#]+?)/(?:index\.php/)?s/([A-Za-z0-9]+)/?(?:[?\#].*)?$#', trim($url), $m))
++  {
++    return null;
++  }
++
++  return ['base' => $m[1], 'token' => $m[2]];
++}
++
++
++// Attribute für den Fotolink: mit data-bb-upload lädt theme.js direkt hoch
++function bb_fotos_attribute(string $url, int $room_id) : array
++{
++  $attr = ['href' => $url, 'target' => '_blank', 'rel' => 'noopener', 'class' => 'bb-fotos-link'];
++  if (bb_nextcloud_share($url) !== null)
++  {
++    $attr['data-bb-upload'] = 'bb_fotos.php';
++    $attr['data-room'] = $room_id;
++  }
++
++  return $attr;
++}
++
++
++function bb_link_html(string $url, string $text) : string
++{
++  return '<a href="' . escape_html($url) . '" target="_blank" rel="noopener">' . escape_html($text) . '</a>';
++}
++
++
++// Fotos hochladen darf nur, wer die Buchung angelegt hat
++function bb_ist_eigene(?string $create_by) : bool
++{
++  $user = session()->getCurrentUser();
++
++  return isset($user, $create_by) && (strcasecmp($user->username, $create_by) === 0);
++}
++
++
++// Zusätzliche Zeilen für die Tabelle in view_entry.php
++function bb_unterlagen_rows(array $row) : string
++{
++  $html = '';
++  $unterlagen = bb_unterlagen_url((int) $row['room_id']);
++  if (isset($unterlagen))
++  {
++    $html .= "<tr>\n<td>Bootsunterlagen</td>\n<td>" .
++             bb_link_html($unterlagen, 'Handbuch & Checklisten öffnen') . "</td>\n</tr>\n";
++  }
++  $fotos = bb_ist_eigene($row['create_by'] ?? null) ? bb_fotos_url((int) $row['room_id']) : null;
++  if (isset($fotos))
++  {
++    $a = new ElementA();
++    $a->setAttributes(bb_fotos_attribute($fotos, (int) $row['room_id']))
++      ->setText('Fotos hochladen');
++    $html .= "<tr>\n<td>Schadensfotos</td>\n<td>" . $a->toHTML() . "</td>\n</tr>\n";
++  }
++
++  return ($html === '') ? '' : "<tbody class=\"bb-unterlagen\">\n$html</tbody>\n";
++}
++
++
++// Hinweis unter dem Bemerkungsfeld im Buchungsformular
++function bb_fotos_field(?int $room_id, ?string $create_by=null) : ?FieldDiv
++{
++  $fotos = bb_fotos_url($room_id);
++  if (!isset($fotos) || !bb_ist_eigene($create_by))
++  {
++    return null;
++  }
++  $a = new ElementA();
++  $a->setAttributes(bb_fotos_attribute($fotos, (int) $room_id))
++    ->setText('Fotos vom Schaden hier hochladen');
++  $field = new FieldDiv();
++  $field->setLabel('')
++        ->addControlElement($a);
++  $field->addClass('bb-fotos');
++
++  return $field;
++}
+diff --git a/web/view_entry.php b/web/view_entry.php
+index 7deb0df..bce9941 100644
+--- a/web/view_entry.php
++++ b/web/view_entry.php
+@@ -997,6 +997,9 @@ if (!empty($error))
+ // If it's a registration event, then we only show the most important details, unless it's writable.
+ $major_details_only = $row['allow_registration'] && !getWritable($row['create_by'], $row['room_id'], false);
+ echo create_details_body($row, true, $keep_private, $room_disabled, $major_details_only);
++// Bootsbuchung-Anpassung: Links zu Bootsunterlagen und Schadensfotos (Nextcloud)
++require_once 'bb_unterlagen.inc';
++echo bb_unterlagen_rows($row);
+ 
+ // If bookings require approval, and the room is enabled, put the buttons
+ // to do with managing the bookings in the footer

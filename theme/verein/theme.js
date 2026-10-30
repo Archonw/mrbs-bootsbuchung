@@ -409,7 +409,8 @@
 
 
 /* =============================================================================
-   Menüpunkt "Mitsegeln & Kurse" (Seite bb_mitsegeln.php aus kurs.patch)
+   Menüpunkte "Mitsegeln & Kurse" (Seite bb_mitsegeln.php aus kurs.patch)
+   und "Boote" (bb_boote.php aus bootsuebersicht.patch)
    – nur für angemeldete Benutzer
    ============================================================================= */
 (function () {
@@ -432,6 +433,16 @@
       a.setAttribute('aria-current', 'page');
     }
     menu.insertBefore(a, menu.firstChild);
+
+    // "Boote": Bootsübersicht (bb_boote.php aus bootsuebersicht.patch)
+    var b = document.createElement('a');
+    b.className = 'bb-menu-boote';
+    b.href = 'bb_boote.php';
+    b.textContent = 'Boote';
+    if (/bb_boote\.php/.test(location.pathname)) {
+      b.setAttribute('aria-current', 'page');
+    }
+    menu.insertBefore(b, a.nextSibling);
   }
 
   if (document.readyState === 'loading') {
@@ -639,6 +650,7 @@
   var ICON = {
     plan:   svg('<rect x="3" y="4" width="18" height="17" rx="2"></rect><path d="M3 9h18M8 2v4M16 2v4"></path>'),
     segeln: svg('<path d="M12 3v14M11 4 4 15h7zM13 6l6 9h-6zM3 18h18l-2 3H5z"></path>'),
+    boote:  svg('<circle cx="12" cy="5" r="2"></circle><path d="M12 7v14M8 10h8M4 13a8 8 0 0 0 16 0"></path>'),
     meine:  svg('<circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path>'),
     push:   svg('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 0 1-3.4 0"></path>'),
     mehr:   svg('<circle cx="5" cy="12" r="1.2"></circle><circle cx="12" cy="12" r="1.2"></circle><circle cx="19" cy="12" r="1.2"></circle>'),
@@ -650,8 +662,24 @@
     var q = location.search;
     if (/bb_mitsegeln\.php/.test(p)) { return /filter=meine/.test(q) ? 'meine' : 'segeln'; }
     if (/bb_benachrichtigungen\.php/.test(p)) { return 'push'; }
+    if (/bb_boote\.php/.test(p)) { return 'boote'; }
     if (/(index\.php|\/)$/.test(p) || /index\.php/.test(p)) { return 'plan'; }
     return '';
+  }
+
+  // Echte Höhe der Leiste als CSS-Variable: Speichern-Leiste und Abstand
+  // unten richten sich danach (Schriftgröße und Gesten-Leiste sind je
+  // Handy verschieden)
+  function merkeHoehe(nav) {
+    function setzen() {
+      document.documentElement.style.setProperty('--bb-appnav-h', nav.offsetHeight + 'px');
+    }
+    setzen();
+    if (window.ResizeObserver) {
+      new ResizeObserver(setzen).observe(nav);
+    } else {
+      window.addEventListener('resize', setzen);
+    }
   }
 
   // Nicht angemeldet: statt der Leiste ein großer Knopf „Anmelden“ – sonst
@@ -672,7 +700,17 @@
     nav.appendChild(b);
     document.body.appendChild(nav);
     document.documentElement.classList.add('bb-hat-appnav');
+    merkeHoehe(nav);
   }
+
+  function menuZu() {
+    var banner = document.querySelector('header.banner.bb-menu-open');
+    var t = banner && banner.querySelector('.bb-menu-toggle');
+    if (t) { t.click(); }
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { menuZu(); }
+  });
 
   function add() {
     if (document.querySelector('.bb-appnav')) {
@@ -690,8 +728,8 @@
     var eintraege = [
       ['plan', 'Plan', 'index.php'],
       ['segeln', 'Mitsegeln', 'bb_mitsegeln.php'],
+      ['boote', 'Boote', 'bb_boote.php'],
       ['meine', 'Meine', 'bb_mitsegeln.php?filter=meine'],
-      ['push', 'Hinweise', 'bb_benachrichtigungen.php'],
       ['mehr', 'Mehr', null]
     ];
     eintraege.forEach(function (e) {
@@ -706,11 +744,17 @@
         el.setAttribute('aria-current', 'page');
       }
       if (e[0] === 'mehr') {
+        el.className = 'bb-appnav-mehr';
+        el.setAttribute('aria-haspopup', 'true');
         el.addEventListener('click', function () {
           var t = document.querySelector('.bb-menu-toggle');
           if (t) {
             t.click();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            // Ohne obere Leiste klappt das Menü unten auf (theme.css),
+            // sonst oben in der Kopfzeile
+            if (!window.matchMedia('(max-width: 700px)').matches) {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
           }
         });
       }
@@ -718,6 +762,18 @@
     });
     document.body.appendChild(nav);
     document.documentElement.classList.add('bb-hat-appnav');
+    merkeHoehe(nav);
+
+    // Angemeldet am Handy bleibt oben nur Wimpel und Name: das Menü
+    // (Links, Datum, Suche) öffnet sich über „Mehr“ als Blatt von unten.
+    // Ein Tipp daneben oder Esc schließt es.
+    document.documentElement.classList.add('bb-ohne-kopf');
+    if (!document.querySelector('.bb-menu-hintergrund')) {
+      var hg = document.createElement('div');
+      hg.className = 'bb-menu-hintergrund';
+      hg.addEventListener('click', menuZu);
+      document.body.appendChild(hg);
+    }
 
     // Plan: "+" für eine neue Buchung am angezeigten Tag
     if (aktiv === 'plan' && !document.querySelector('.bb-fab')) {
@@ -1038,4 +1094,401 @@
   } else {
     zeigen();
   }
+})();
+
+
+/* =============================================================================
+   Schadensfotos direkt hochladen (unterlagen.patch, bb_fotos.php)
+
+   Der Link „Fotos vom Schaden hier hochladen“ führt sonst auf die
+   Nextcloud-Seite: dort erst „Hochladen“ tippen, danach zurückwischen, und
+   eine Rückmeldung gibt es kaum. Trägt der Link data-bb-upload, wird daraus
+   ein Knopf, der sofort die Auswahl des Handys öffnet (Kamera, Video,
+   Dateien). Die Dateien gehen über bb_fotos.php in die Ablage des Bootes,
+   jede Datei zeigt ihren Fortschritt, am Ende steht, wie es weitergeht.
+   Große Fotos werden vorher verkleinert (schneller am Steg), Videos nicht.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var STUECK = 1536 * 1024;          // passt unter upload_max_filesize = 2 MB
+  var VERKLEINERN_AB = 2.5 * 1024 * 1024;
+  var KANTE = 2560;
+
+  var ICON_KAMERA = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13.5" r="3.5"></circle></svg>';
+
+  function kennung() {
+    var z = new Uint8Array(12);
+    window.crypto.getRandomValues(z);
+    return Array.prototype.map.call(z, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+  }
+
+  function token() {
+    var m = document.querySelector('meta[name="csrf_token"]');
+    var i = document.querySelector('input[name="csrf_token"]');
+    return m ? m.content : (i ? i.value : '');
+  }
+
+  // Boot: im Formular das gerade gewählte, sonst das der Buchung
+  function boot(link) {
+    var sel = document.getElementById('rooms');
+    if (sel && sel.selectedIndex >= 0) {
+      return { id: sel.options[sel.selectedIndex].value, name: sel.options[sel.selectedIndex].text };
+    }
+    return { id: link.getAttribute('data-room'), name: '' };
+  }
+
+  function verkleinern(datei) {
+    if (!/^image\/(jpeg|png|webp)$/.test(datei.type) || datei.size < VERKLEINERN_AB || !window.createImageBitmap) {
+      return Promise.resolve(datei);
+    }
+    return createImageBitmap(datei, { imageOrientation: 'from-image' }).then(function (bild) {
+      var f = Math.min(1, KANTE / Math.max(bild.width, bild.height));
+      var c = document.createElement('canvas');
+      c.width = Math.round(bild.width * f);
+      c.height = Math.round(bild.height * f);
+      c.getContext('2d').drawImage(bild, 0, 0, c.width, c.height);
+      return new Promise(function (ok) {
+        c.toBlob(function (blob) {
+          ok(blob && blob.size < datei.size ? new File([blob], datei.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : datei);
+        }, 'image/jpeg', 0.85);
+      });
+    }).catch(function () { return datei; });
+  }
+
+  // Eine Datei in Stücken senden; fortschritt(0…1)
+  function senden(url, raum, datei, nr, fortschritt) {
+    var id = kennung();
+    function stueck(offset) {
+      var body = new FormData();
+      body.append('csrf_token', token());
+      body.append('room', raum);
+      body.append('id', id);
+      body.append('name', datei.name);
+      body.append('offset', offset);
+      body.append('size', datei.size);
+      body.append('nr', nr);
+      body.append('teil', datei.slice(offset, offset + STUECK), 'teil');
+      return fetch(url, { method: 'POST', body: body, credentials: 'same-origin' })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (r.status === 409 && typeof j.weiter === 'number') {
+              return stueck(j.weiter);
+            }
+            if (!r.ok) {
+              throw new Error(j.fehler || ('Fehler ' + r.status));
+            }
+            if (j.ok) {
+              fortschritt(1);
+              return j;
+            }
+            fortschritt(j.weiter / datei.size);
+            return stueck(j.weiter);
+          });
+        }, function () {
+          throw new Error('Keine Verbindung');
+        });
+    }
+    return stueck(0);
+  }
+
+  function esc(t) {
+    var d = document.createElement('span');
+    d.textContent = t;
+    return d.innerHTML;
+  }
+
+  function zahl(n) {
+    return n === 1 ? '1 Datei' : n + ' Dateien';
+  }
+
+  function init(link) {
+    var imFormular = !!link.closest('form');
+    var box = document.createElement('div');
+    box.className = 'bb-fotos-upload';
+    // Ohne accept zeigt Android erst die Auswahl Kamera / Video / Dateien.
+    // Mit accept="image/*" öffnet es direkt die Galerie, ohne Kamera.
+    // Nur Fotos und Videos lässt bb_fotos.php durch.
+    box.innerHTML =
+      '<input type="file" multiple hidden>' +
+      '<button type="button" class="bb-fotos-knopf">' + ICON_KAMERA + '<span></span></button>' +
+      '<ul class="bb-fotos-liste"></ul>' +
+      '<p class="bb-fotos-status" role="status" aria-live="polite"></p>';
+    var eingabe = box.querySelector('input');
+    var knopf = box.querySelector('button');
+    var liste = box.querySelector('ul');
+    var status = box.querySelector('p');
+    var knopfText = link.textContent;
+    knopf.querySelector('span').textContent = knopfText;
+    link.parentNode.insertBefore(box, link);
+    // Der Nextcloud-Link bleibt als Ausweg, falls das Hochladen hier scheitert
+    link.classList.add('bb-fotos-nc');
+    link.textContent = 'Fotoablage in der Nextcloud öffnen';
+    link.hidden = true;
+    box.appendChild(link);
+
+    var laeuft = false;
+    var nr = 0;
+
+    knopf.addEventListener('click', function () {
+      if (!laeuft) { eingabe.click(); }
+    });
+
+    eingabe.addEventListener('change', function () {
+      var dateien = Array.prototype.slice.call(eingabe.files);
+      eingabe.value = '';
+      if (!dateien.length) { return; }
+      var b = boot(link);
+      laeuft = true;
+      knopf.disabled = true;
+      link.hidden = true;
+      status.className = 'bb-fotos-status';
+      var fertig = 0;
+
+      var zeilen = dateien.map(function (d) {
+        var li = document.createElement('li');
+        var vorschau = /^image\//.test(d.type)
+          ? '<img alt="" src="' + URL.createObjectURL(d) + '">'
+          : '<span class="bb-fotos-video" aria-hidden="true">▶</span>';
+        li.innerHTML = vorschau + '<span class="bb-fotos-text"><span class="bb-fotos-name"></span>' +
+          '<span class="bb-fotos-balken"><span></span></span><span class="bb-fotos-meldung">wartet …</span></span>';
+        li.querySelector('.bb-fotos-name').textContent = d.name;
+        liste.appendChild(li);
+        return li;
+      });
+
+      var kette = Promise.resolve();
+      dateien.forEach(function (d, i) {
+        var li = zeilen[i];
+        var balken = li.querySelector('.bb-fotos-balken > span');
+        var meldung = li.querySelector('.bb-fotos-meldung');
+        kette = kette.then(function () {
+          status.textContent = 'Wird hochgeladen … ' + (i + 1) + ' von ' + dateien.length;
+          meldung.textContent = 'wird hochgeladen …';
+          li.classList.add('bb-fotos-aktiv');
+          return verkleinern(d);
+        }).then(function (datei) {
+          nr += 1;
+          return senden(link.getAttribute('data-bb-upload'), b.id, datei, nr, function (anteil) {
+            balken.style.width = Math.round(anteil * 100) + '%';
+          });
+        }).then(function (antwort) {
+          fertig += 1;
+          if (antwort.boot) { b.name = antwort.boot; }
+          // Schadensmeldung: Dateinamen mitschicken, damit die Fotos zur Meldung gehören
+          var meldeForm = link.closest('form.bb-wartung-formular');
+          if (meldeForm && antwort.datei) {
+            var feld = document.createElement('input');
+            feld.type = 'hidden';
+            feld.name = 'fotos[]';
+            feld.value = antwort.datei;
+            meldeForm.appendChild(feld);
+          }
+          li.className = 'bb-fotos-ok';
+          meldung.textContent = '✓ hochgeladen';
+        }, function (e) {
+          li.className = 'bb-fotos-fehler';
+          meldung.textContent = '✗ ' + e.message;
+        });
+      });
+
+      kette.then(function () {
+        laeuft = false;
+        knopf.disabled = false;
+        var wo = b.name ? 'in der Fotoablage von „' + esc(b.name) + '“' : 'in der Fotoablage des Bootes';
+        var text;
+        if (fertig === dateien.length) {
+          status.className = 'bb-fotos-status bb-fotos-status-ok';
+          text = '<strong>Fertig: ' + zahl(fertig) + (fertig === 1 ? ' ist ' : ' sind ') + wo + '.</strong> ';
+          text += imFormular
+            ? 'Schreib jetzt noch oben kurz, was los ist, und tippe auf <b>' +
+              (link.closest('.bb-wartung-formular') ? (link.closest('form').querySelector('button[type=submit]') || {}).textContent || 'Meldung abschicken' : 'Speichern') +
+              '</b>. Erst dann bekommt der Bootswart die Mail.'
+            : 'Der Bootswart findet sie dort. Steht der Schaden noch nicht in der Buchung, dann <b>Bearbeiten</b> und unter „Gibt es etwas zu melden?“ kurz beschreiben.';
+        } else {
+          status.className = 'bb-fotos-status bb-fotos-status-fehler';
+          text = '<strong>' + (fertig ? zahl(fertig) + ' hochgeladen, ' + zahl(dateien.length - fertig) + ' nicht.' : 'Das Hochladen hat nicht geklappt.') + '</strong> ' +
+            'Tippe nochmal auf den Knopf oder lade die Fotos direkt in der Nextcloud hoch:';
+          link.hidden = false;
+        }
+        status.innerHTML = text;
+        knopf.querySelector('span').textContent = fertig ? 'Weitere Fotos hochladen' : knopfText;
+      });
+    });
+
+    // Nicht mitten im Hochladen die Seite verlassen
+    var form = link.closest('form');
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        if (laeuft) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          status.textContent = 'Bitte warten, bis die Fotos hochgeladen sind, dann Speichern.';
+          box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }, true);
+    }
+    window.addEventListener('beforeunload', function (e) {
+      if (laeuft) { e.preventDefault(); e.returnValue = ''; }
+    });
+  }
+
+  function start() {
+    Array.prototype.forEach.call(document.querySelectorAll('a.bb-fotos-link[data-bb-upload]'), function (link) {
+      if (!link.dataset.bbInit) {
+        link.dataset.bbInit = '1';
+        init(link);
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start);
+  } else {
+    start();
+  }
+})();
+
+
+/* =============================================================================
+   Boot bearbeiten (edit_room.php): eigene Felder in Gruppen
+
+   MRBS hängt alle Zusatzspalten des Bootes einfach untereinander an. Hier
+   kommen sie in eigene Abschnitte, damit klar ist, was wohin gehört:
+   "Bootsdaten" (Tabelle auf der Bootsseite) und "Bootsübersicht für
+   Mitglieder" (Nextcloud-Links und Infotext). Die Felder bleiben im selben
+   Formular, es ändert sich nur die Anordnung.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var GRUPPEN = [
+    ['Bootsdaten (Bootsseite)', ['laenge', 'breite', 'tiefgang', 'masthoehe', 'gewicht']],
+    ['Bootsübersicht für Mitglieder', ['infos', 'unterlagen', 'fotos']]
+  ];
+
+  function ordnen() {
+    var form = document.getElementById('edit_room');
+    if (!form || form.querySelector('.bb-feldgruppe')) {
+      return;
+    }
+    var knoepfe = form.querySelector('.buttons');
+    GRUPPEN.forEach(function (g) {
+      var felder = g[1].map(function (name) {
+        var el = form.querySelector('[name="f_' + name + '"]');
+        return el && el.closest('fieldset > div');
+      }).filter(Boolean);
+      if (!felder.length) {
+        return;
+      }
+      var fs = document.createElement('fieldset');
+      fs.className = 'bb-feldgruppe';
+      var legend = document.createElement('legend');
+      legend.textContent = g[0];
+      fs.appendChild(legend);
+      var ziel = knoepfe ? knoepfe.parentNode : felder[0].parentNode;
+      ziel.insertBefore(fs, knoepfe || null);
+      felder.forEach(function (f) { fs.appendChild(f); });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ordnen);
+  } else {
+    ordnen();
+  }
+})();
+
+
+/* =============================================================================
+   Berichtsseite (report.php): Hinweis auf den Wartungsbericht
+   (bb_wartung_bericht.php aus bootsuebersicht.patch)
+   ============================================================================= */
+(function () {
+  'use strict';
+  function add() {
+    var form = document.getElementById('report_form');
+    if (!form || document.querySelector('.bb-bericht-hinweis')) {
+      return;
+    }
+    var p = document.createElement('p');
+    p.className = 'bb-bericht-hinweis';
+    var a = document.createElement('a');
+    a.href = 'bb_wartung_bericht.php';
+    a.textContent = 'Wartung & Reparaturen auswerten (Wartungsbericht)';
+    p.appendChild(a);
+    form.parentNode.insertBefore(p, form);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', add);
+  } else {
+    add();
+  }
+})();
+
+
+/* =============================================================================
+   Menü der Kopfzeile ordnen
+
+   Erst was alle Mitglieder brauchen, dann die Punkte für Admins, Hilfe zum
+   Schluss. MRBS liefert Hilfe, Bericht, Importieren, Räume (admin.php) und
+   Benutzerliste; die eigenen Punkte kommen weiter oben aus diesem Skript.
+   „Räume“ heißt hier „Verwaltung“: auf admin.php stellt man Verein und Boote
+   ein. Den Wortlaut nicht über $vocab_override['de']['rooms'] ändern – der
+   gilt auch für die Bootsauswahl im Buchungsformular.
+   Läuft nach den anderen Menüpunkten (steht deshalb am Ende der Datei).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var REIHENFOLGE = [
+    [/bb_mitsegeln\.php/, 10],
+    [/bb_boote\.php/, 20],
+    [/report\.php/, 30],
+    [/bb_benachrichtigungen\.php/, 40],
+    [/admin\.php/, 60],
+    [/edit_users\.php/, 70],
+    [/import\.php/, 80],
+    [/help\.php/, 99]
+  ];
+
+  function rang(a) {
+    var href = a.getAttribute('href') || '';
+    for (var i = 0; i < REIHENFOLGE.length; i++) {
+      if (REIHENFOLGE[i][0].test(href)) { return REIHENFOLGE[i][1]; }
+    }
+    return 50; // Unbekanntes (z. B. Kiosk) vor die Admin-Punkte
+  }
+
+  function ordnen() {
+    var menu = document.querySelector('header.banner:not(.simple) nav.menu');
+    if (!menu) {
+      return;
+    }
+    var links = Array.prototype.filter.call(menu.children, function (el) {
+      return el.tagName === 'A';
+    });
+    links.forEach(function (a) {
+      if (/(^|\/)admin\.php/.test(a.getAttribute('href') || '')) {
+        a.textContent = 'Verwaltung';
+      }
+    });
+    var sortiert = links.slice().sort(function (x, y) { return rang(x) - rang(y); });
+    if (sortiert.every(function (a, i) { return a === links[i]; })) {
+      return;
+    }
+    // Der Knopf Hell/Dunkel bleibt hinter den Links
+    var vor = menu.querySelector('.bb-theme-toggle');
+    sortiert.forEach(function (a) { menu.insertBefore(a, vor); });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ordnen);
+  } else {
+    ordnen();
+  }
+  var start = function () {
+    new MutationObserver(ordnen).observe(document.body, { childList: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
 })();

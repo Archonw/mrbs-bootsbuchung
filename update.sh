@@ -97,11 +97,11 @@ for f in sql/*.sql; do
   docker exec -i mrbs_db sh -c 'mariadb -h127.0.0.1 -umrbs -p"$MARIADB_PASSWORD" mrbs' < "$f"
 done
 
-# Einstellungen für App und Push nachtragen, falls sie in einer älteren
+# Einstellungen für neue Funktionen nachtragen, falls sie in einer älteren
 # config.inc.php noch fehlen (wird nur einmal ergänzt, nie überschrieben)
 CONF=config/config.inc.php
 if [ -f "$CONF" ] && grep -qE '^\s*\?>' "$CONF"; then
-  echo "    Hinweis: $CONF endet mit '?>' – App-Einstellungen bitte von Hand ergänzen (siehe README, Abschnitt App)."
+  echo "    Hinweis: $CONF endet mit '?>' – neue Einstellungen bitte von Hand ergänzen (siehe CHANGELOG)."
 elif [ -f "$CONF" ]; then
   ERGAENZT=0
   if ! grep -q 'cookie_samesite_lax' "$CONF"; then
@@ -129,8 +129,37 @@ PHP
       echo "    Hinweis: Push-Schlüssel konnte nicht erzeugt werden – siehe README, Abschnitt Push."
     fi
   fi
+  # Wartungs-Logbuch: die Rolle "Bootswartung" darf nur ein Admin vergeben
+  if ! grep -qE "protected_fields.*bootswartung" "$CONF"; then
+    cat >> "$CONF" <<'PHP'
+
+// --- Rolle "Bootswartung" darf nur ein Admin vergeben (ergänzt von update.sh) ---
+$auth['db']['protected_fields'][] = 'bootswartung';
+PHP
+    ERGAENZT=1
+  fi
+  if ! grep -q 'room.unterlagen' "$CONF"; then
+    cat >> "$CONF" <<'PHP'
+
+// --- Bootsübersicht, Bootsdaten, Wartungs-Logbuch, Unterlagen (ergänzt von update.sh) ---
+$vocab_override['de']['room.infos']          = 'Infos für Mitglieder';
+$vocab_override['de']['room.laenge']         = 'Länge üA';
+$vocab_override['de']['room.breite']         = 'Breite üA';
+$vocab_override['de']['room.tiefgang']       = 'Tiefgang';
+$vocab_override['de']['room.masthoehe']      = 'Masthöhe';
+$vocab_override['de']['room.gewicht']        = 'Gewicht';
+$vocab_override['de']['users.bootswartung']  = 'Bootswartung';
+$vocab_override['de']['room.unterlagen']     = 'Unterlagen (Link)';
+$vocab_override['de']['room.fotos']          = 'Fotoablage (Link)';
+// Gemeinsame Fotoablage für Boote ohne eigene (Nextcloud-Freigabe "Dateiablage"):
+// $bb_fotos_url = 'https://cloud.mein-verein.de/s/…';
+// Ordner der Schadensfotos zum Ansehen (Link in den Mails), {boot} = Bootsname:
+// $bb_fotos_ordner_url = 'https://cloud.mein-verein.de/apps/files/?dir=/Schadensfotos/{boot}';
+PHP
+    ERGAENZT=1
+  fi
   if [ "$ERGAENZT" = 1 ]; then
-    echo "==> App- und Push-Einstellungen in $CONF ergänzt"
+    echo "==> Fehlende Einstellungen in $CONF ergänzt"
     docker compose restart mrbs >/dev/null
   fi
 fi

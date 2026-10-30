@@ -1297,7 +1297,7 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   .bb-appnav-gast svg { width: 24px; height: 24px; padding: 0; }
 
   /* Platz für die Leiste, Impressum darüber */
-  html.bb-hat-appnav body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  html.bb-hat-appnav body { padding-bottom: calc(var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom))) + 8px); }
   html.bb-hat-appnav .bb-footer { bottom: calc(76px + env(safe-area-inset-bottom)); }
 
   .bb-fab {
@@ -1318,6 +1318,66 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   .bb-fab svg { width: 28px; height: 28px; }
   /* Mit "+" rutscht das Impressum nach links, damit es nicht verdeckt wird */
   html.bb-hat-appnav body:has(.bb-fab) .bb-footer { right: auto; left: 12px; }
+}
+
+/* Angemeldet am Handy: Kopfzeile nur mit Wimpel und Namen, ohne ☰.
+   „Mehr“ unten öffnet das Menü (Links, Datum, Suche) als Blatt über der
+   App-Navigation. */
+.bb-menu-hintergrund { display: none; }
+@media (max-width: 700px) {
+  html.bb-ohne-kopf header.banner .bb-menu-toggle { display: none !important; }
+  html.bb-ohne-kopf .banner.bb-menu-open nav.container {
+    position: fixed;
+    left: 0;
+    right: 0;
+    width: auto;
+    box-sizing: border-box;
+    bottom: var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom)));
+    z-index: 46;
+    max-height: calc(100dvh - var(--bb-appnav-h, 64px) - 3rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    margin: 0;
+    padding: 1.4rem 1rem 1rem;
+    border-top: 0;
+    border-radius: 18px 18px 0 0;
+    background: var(--bb-banner);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25);
+    animation: bb-blatt 0.18s ease-out;
+  }
+  /* Was unten in der App-Leiste steht, nicht noch einmal im Menü */
+  html.bb-ohne-kopf .banner nav.container .bb-menu-mitsegeln,
+  html.bb-ohne-kopf .banner nav.container .bb-menu-boote { display: none !important; }
+  /* Griff oben als Hinweis, dass es ein aufgeklapptes Blatt ist */
+  html.bb-ohne-kopf .banner.bb-menu-open nav.container::before {
+    content: "";
+    position: absolute;
+    top: 0.55rem;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: 2px;
+    background: var(--bb-banner-field-border);
+  }
+  html.bb-ohne-kopf body:has(header.banner.bb-menu-open) .bb-menu-hintergrund {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    background: rgba(0, 0, 0, 0.45);
+  }
+  /* „Mehr“ leuchtet, solange das Menü offen ist */
+  html.bb-ohne-kopf body:has(header.banner.bb-menu-open) .bb-appnav-mehr { color: var(--bb-text) !important; }
+  html.bb-ohne-kopf body:has(header.banner.bb-menu-open) .bb-appnav-mehr svg { background: var(--bb-accent-tint); color: var(--bb-accent); }
+  html.bb-ohne-kopf body:has(header.banner.bb-menu-open) .bb-fab { display: none; }
+}
+@keyframes bb-blatt {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.bb-ohne-kopf .banner.bb-menu-open nav.container { animation: none; }
 }
 
 /* ---------- 15. Handy: Tagesplan als Liste (theme.js) --------------------- */
@@ -1451,7 +1511,7 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   form#main[action$="edit_entry_handler.php"] input[type="text"],
   form#main[action$="edit_entry_handler.php"] input.form-control,
   form#main[action$="edit_entry_handler.php"] textarea,
-  form#main[action$="edit_entry_handler.php"] select {
+  form#main[action$="edit_entry_handler.php"] select:not(.select2-hidden-accessible) {
     float: none;
     width: 100% !important;
     max-width: 100% !important;
@@ -1510,6 +1570,18 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   #registration .bb-mitsegler-hint { margin: 0; }
   .bb-capacity-hint { display: block; margin: 0.3rem 0 0; }
 
+  /* Link "Fotos vom Schaden hier hochladen" (unterlagen.patch): direkt unter
+     "Gibt es etwas zu melden?", ohne leere Beschriftung darüber */
+  form#main[action$="edit_entry_handler.php"] .bb-fotos { margin-top: -0.5rem; }
+  form#main[action$="edit_entry_handler.php"] .bb-fotos > label:empty { display: none; }
+  form#main[action$="edit_entry_handler.php"] .bb-fotos > div { margin: 0; width: 100%; }
+  form#main[action$="edit_entry_handler.php"] .bb-fotos a.bb-fotos-link {
+    display: inline-block;
+    margin: 0;
+    padding: 0.35rem 0;
+    font-weight: 600;
+  }
+
   /* Speichern immer erreichbar: Leiste über der App-Navigation */
   form#main[action$="edit_entry_handler.php"] > fieldset:has(.submit_buttons) {
     position: sticky;
@@ -1521,8 +1593,14 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
     border-top: 1px solid var(--bb-border);
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
   }
+  /* Platz unter der Leiste, sonst verdeckt sie am Seitenende die letzten
+     Felder (der Abstand am body greift hier nicht, das Formular ragt
+     darüber hinaus) */
+  html.bb-hat-appnav form#main[action$="edit_entry_handler.php"] {
+    padding-bottom: var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom)));
+  }
   html.bb-hat-appnav form#main[action$="edit_entry_handler.php"] > fieldset:has(.submit_buttons) {
-    bottom: calc(64px + env(safe-area-inset-bottom));
+    bottom: var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom)));
     padding-bottom: 0.6rem;
   }
   .submit_buttons {
@@ -1554,4 +1632,318 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   .bb-pruefung[hidden] { display: none; }
   /* Mit fester Speichern-Leiste kein "+"-Knopf und kein Impressum davor */
   body:has(form#main[action$="edit_entry_handler.php"]) .bb-footer { display: none; }
+}
+
+
+/* ---------- 17. Schadensfotos direkt hochladen (theme.js, bb_fotos.php) -- */
+.bb-fotos-upload { margin: 0.25rem 0 0.5rem; max-width: 32rem; }
+.bb-fotos-knopf {
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--bb-accent);
+  border-radius: 999px;
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint, var(--bb-text));
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.bb-fotos-knopf svg { color: var(--bb-accent); flex: none; }
+.bb-fotos-knopf:disabled { opacity: 0.6; cursor: progress; }
+.bb-fotos-knopf:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+.bb-fotos-liste { list-style: none; margin: 0.6rem 0 0; padding: 0; }
+.bb-fotos-liste:empty { display: none; }
+.bb-fotos-liste li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--bb-border-soft, var(--bb-border));
+}
+.bb-fotos-liste li:first-child { border-top: 0; }
+.bb-fotos-liste img,
+.bb-fotos-video {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--bb-radius-sm, 8px);
+  object-fit: cover;
+  background: var(--bb-bg);
+}
+.bb-fotos-video { display: grid; place-items: center; color: var(--bb-muted); }
+.bb-fotos-text { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; flex: 1; }
+.bb-fotos-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+.bb-fotos-balken { display: block; height: 4px; border-radius: 2px; background: var(--bb-border); overflow: hidden; }
+.bb-fotos-balken > span { display: block; width: 0; height: 100%; background: var(--bb-accent); transition: width 0.2s; }
+.bb-fotos-ok .bb-fotos-balken, .bb-fotos-fehler .bb-fotos-balken { display: none; }
+.bb-fotos-meldung { font-size: 0.85rem; color: var(--bb-muted); }
+.bb-fotos-ok .bb-fotos-meldung { color: var(--bb-accent); font-weight: 600; }
+.bb-fotos-fehler .bb-fotos-meldung { color: var(--bb-danger); font-weight: 600; }
+.bb-fotos-status { margin: 0.5rem 0 0; font-size: 0.95rem; }
+.bb-fotos-status:empty { display: none; }
+.bb-fotos-status-ok,
+.bb-fotos-status-fehler {
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--bb-radius-sm, 8px);
+  border-left: 4px solid var(--bb-accent);
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint, var(--bb-text));
+}
+.bb-fotos-status-fehler { border-left-color: var(--bb-danger); background: transparent; color: var(--bb-text); }
+.bb-fotos-nc { display: inline-block; margin-top: 0.35rem; }
+.bb-fotos-nc[hidden] { display: none !important; }
+/* ---------- 18. Bootsübersicht (bb_boote.php) ---------------------------- */
+#bb-boote { max-width: 60rem; margin: 0 auto; padding: 1rem 0 2rem; }
+#bb-boote h2 { margin: 0 0 0.25rem; }
+#bb-boote h3 { margin: 1.75rem 0 0.6rem; font-size: 1.1rem; }
+#bb-boote h4 { margin: 1rem 0 0.4rem; font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--bb-muted); }
+#bb-boote .bb-intro { margin: 0 0 1rem; color: var(--bb-muted); }
+#bb-boote .bb-leer { padding: 1.5rem; border-radius: var(--bb-radius); background: var(--bb-surface); color: var(--bb-muted); }
+#bb-boote .bb-zurueck { margin: 0 0 0.5rem; }
+#bb-boote .bb-zurueck a { font-weight: 600; text-decoration: none; }
+
+/* Kacheln */
+#bb-boote .bb-boot-kacheln {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem;
+}
+#bb-boote .bb-boot-kachel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+  color: var(--bb-text);
+  text-decoration: none;
+}
+#bb-boote .bb-boot-kachel:hover { outline: 2px solid var(--bb-accent); outline-offset: -2px; }
+#bb-boote .bb-boot-kachel:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+#bb-boote .bb-boot-kachel img,
+#bb-boote .bb-boot-ohne-bild {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;   /* Hochformat: Boote mit Mast sind hoch */
+  object-fit: cover;
+  background: var(--bb-surface-2);
+}
+#bb-boote .bb-boot-ohne-bild { display: grid; place-items: center; font-size: 3rem; background: var(--bb-accent-tint); }
+#bb-boote .bb-boot-name { padding: 0.75rem 1rem 0; font-weight: 700; font-size: 1.1rem; }
+#bb-boote .bb-boot-beschreibung { padding: 0.15rem 1rem 0; color: var(--bb-muted); font-size: 0.9rem; }
+#bb-boote .bb-boot-kachel > :last-child { padding-bottom: 0.9rem; }
+
+/* Detailseite */
+#bb-boote .bb-boot-fakten { margin: 0 0 1rem; color: var(--bb-muted); }
+#bb-boote .bb-boot-knoepfe { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0 0 1.25rem; }
+#bb-boote .bb-knopf {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 1.1rem;
+  border-radius: var(--bb-radius-sm);
+  border: 1px solid var(--bb-accent);
+  background: var(--bb-accent);
+  color: var(--bb-on-accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+#bb-boote .bb-knopf:hover { background: var(--bb-accent-hover); }
+#bb-boote .bb-knopf.zweitrangig { background: transparent; color: var(--bb-text); border-color: var(--bb-border); }
+#bb-boote .bb-knopf.zweitrangig:hover { background: var(--bb-surface-2); }
+#bb-boote .bb-boot-daten {
+  width: 100%;
+  max-width: 32rem;
+  border-collapse: collapse;
+  border-radius: var(--bb-radius);
+  overflow: hidden;
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+}
+#bb-boote .bb-boot-daten th,
+#bb-boote .bb-boot-daten td { padding: 0.55rem 1rem; text-align: left; border-top: 1px solid var(--bb-border-soft); }
+#bb-boote .bb-boot-daten tr:first-child th,
+#bb-boote .bb-boot-daten tr:first-child td { border-top: 0; }
+#bb-boote .bb-boot-daten th { width: 45%; font-weight: 500; color: var(--bb-muted); }
+#bb-boote .bb-boot-daten td { font-weight: 600; font-variant-numeric: tabular-nums; }
+#bb-boote .bb-boot-infos { margin-top: 1.25rem; }
+#bb-boote .bb-boot-infos {
+  padding: 0.25rem 1.25rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+  overflow-wrap: anywhere;
+}
+/* Galerie: Bilder ungeschnitten (Hoch- und Querformat), gleiche Höhe */
+#bb-boote .bb-boot-bilder {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+#bb-boote .bb-boot-bilder a { display: block; border-radius: var(--bb-radius-sm); overflow: hidden; background: var(--bb-surface-2); }
+#bb-boote .bb-boot-bilder img { display: block; height: 12rem; width: auto; max-width: 100%; object-fit: contain; }
+#bb-boote .bb-boot-dokumente { list-style: none; margin: 0; padding: 0; }
+#bb-boote .bb-boot-dokumente li { margin-bottom: 0.4rem; }
+#bb-boote .bb-boot-dokumente a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+  color: var(--bb-text);
+  text-decoration: none;
+}
+#bb-boote .bb-boot-dokumente a:hover { outline: 2px solid var(--bb-accent); outline-offset: -2px; }
+#bb-boote .bb-dok-typ {
+  flex: 0 0 auto;
+  min-width: 2.6rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+#bb-boote .bb-dok-name { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+#bb-boote .bb-dok-groesse { flex: 0 0 auto; color: var(--bb-muted); font-size: 0.85rem; }
+#bb-boote .bb-boot-ordner { margin: 1.25rem 0 0; }
+#bb-boote .bb-boot-admin {
+  margin: 1.5rem 0 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--bb-radius-sm);
+  border: 1px dashed var(--bb-border);
+  color: var(--bb-muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 560px) {
+  #bb-boote { padding-top: 0.5rem; }
+  #bb-boote .bb-boot-kacheln { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+  #bb-boote .bb-boot-name { padding: 0.5rem 0.75rem 0; font-size: 1rem; }
+  #bb-boote .bb-boot-beschreibung { padding: 0.1rem 0.75rem 0; font-size: 0.8rem; }
+  #bb-boote .bb-boot-kachel > :last-child { padding-bottom: 0.65rem; }
+  #bb-boote .bb-knopf { flex: 1 1 100%; justify-content: center; }
+}
+
+/* Wartung & Reparaturen (bb_wartung.php, Bootsseite) */
+#bb-boote .bb-wartung { list-style: none; margin: 0 0 0.75rem; padding: 0; max-width: 40rem; }
+#bb-boote .bb-wartung-eintrag {
+  margin-bottom: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow), inset 4px 0 0 var(--bb-accent);
+}
+#bb-boote .bb-wartung-eintrag.offen { box-shadow: var(--bb-shadow), inset 4px 0 0 var(--bb-warning); }
+#bb-boote .bb-wartung-kopf { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; color: var(--bb-muted); }
+#bb-boote .bb-wartung-datum { font-weight: 700; font-variant-numeric: tabular-nums; }
+#bb-boote .bb-wartung-status { font-weight: 600; color: var(--bb-accent); }
+#bb-boote .offen .bb-wartung-status { color: var(--bb-warning); }
+#bb-boote .bb-wartung-arbeit { margin: 0.3rem 0 0; font-weight: 600; }
+#bb-boote .bb-wartung-fotonamen { color: var(--bb-muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+#bb-boote .bb-wartung-fotos-uebrig p { margin: 0 0 0.4rem; }
+#bb-boote .bb-wartung-fotos-uebrig ul { margin: 0; padding-left: 1.2rem; font-size: 0.9rem; overflow-wrap: anywhere; }
+#bb-boote .bb-wartung-behebung { margin: 0.4rem 0 0; padding-left: 0.6rem; border-left: 3px solid var(--bb-accent); }
+#bb-boote .bb-wartung-eintrag.offen .bb-wartung-behebung { border-left-color: var(--bb-warning); }
+#bb-boote .bb-wartung-aktionen .bb-knopf { margin-right: 0.5rem; color: var(--bb-on-accent); text-decoration: none; }
+#bb-boote .bb-wartung-details { display: grid; grid-template-columns: auto 1fr; gap: 0.15rem 0.75rem; margin: 0.5rem 0 0; font-size: 0.9rem; }
+#bb-boote .bb-wartung-details dt { color: var(--bb-muted); }
+#bb-boote .bb-wartung-details dd { margin: 0; }
+#bb-boote .bb-wartung-aktionen { margin: 0.5rem 0 0; font-size: 0.9rem; }
+#bb-boote .bb-wartung-aktionen button { padding: 0; border: 0; background: none; color: var(--bb-danger); font: inherit; cursor: pointer; text-decoration: underline; }
+#bb-boote .bb-wartung-formular {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 40rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+}
+#bb-boote .bb-wartung-formular h3 { margin: 0; }
+#bb-boote .bb-wartung-formular label { display: flex; flex-direction: column; gap: 0.25rem; font-weight: 600; font-size: 0.9rem; }
+#bb-boote .bb-wartung-formular label::after { content: none; }
+#bb-boote .bb-wartung-formular input,
+#bb-boote .bb-wartung-formular select,
+#bb-boote .bb-wartung-formular textarea {
+  font: inherit;
+  font-weight: 400;
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--bb-field-border);
+  border-radius: var(--bb-radius-sm);
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  width: 100%;
+  box-sizing: border-box;
+}
+#bb-boote .bb-wartung-zeile { display: flex; gap: 0.75rem; }
+#bb-boote .bb-wartung-zeile > label { flex: 1; }
+#bb-boote .bb-wartung-formular .bb-boot-knoepfe { margin: 0; }
+#bb-boote button.bb-knopf { font: inherit; font-weight: 600; cursor: pointer; }
+
+/* Wartungsbericht (bb_wartung_bericht.php) */
+#bb-boote.bb-wartung-bericht { max-width: none; }
+#bb-boote .bb-bericht-filter { max-width: 48rem; }
+#bb-boote .bb-bericht-scroll { overflow-x: auto; margin-bottom: 1.5rem; border-radius: var(--bb-radius); box-shadow: var(--bb-shadow); background: var(--bb-surface); }
+#bb-boote .bb-bericht-tabelle { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+#bb-boote .bb-bericht-tabelle th,
+#bb-boote .bb-bericht-tabelle td { padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; border-top: 1px solid var(--bb-border-soft); }
+#bb-boote .bb-bericht-tabelle thead th { border-top: 0; color: var(--bb-muted); font-weight: 600; white-space: nowrap; }
+#bb-boote .bb-bericht-tabelle tfoot th { font-weight: 700; border-top: 2px solid var(--bb-border); }
+#bb-boote .bb-bericht-tabelle .zahl { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#bb-boote .bb-bericht-tabelle td:first-child { white-space: nowrap; }
+#bb-boote .bb-bericht-tabelle tr.offen td:first-child { box-shadow: inset 3px 0 0 var(--bb-warning); }
+#bb-boote .bb-bericht-behebung { color: var(--bb-muted); }
+
+/* Berichtsseite: Hinweis auf den Wartungsbericht (theme.js) */
+.bb-bericht-hinweis { margin: 0 0 1rem; }
+
+/* Boot bearbeiten: Feldgruppen (theme.js) */
+#edit_room fieldset.bb-feldgruppe {
+  margin: 0.75rem 0;
+  padding: 0.25rem 1rem 0.5rem;
+  border: 1px solid var(--bb-border);
+  border-radius: var(--bb-radius-sm);
+}
+#edit_room fieldset.bb-feldgruppe > legend { padding: 0 0.4rem; font-size: 0.95rem; font-style: normal; font-weight: 700; color: var(--bb-text); }
+
+/* Bootsseite: Titelbild, daneben Name und Bootsdaten */
+#bb-boote .bb-boot-kopf { display: grid; grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 1.5rem; align-items: center; margin-bottom: 1.25rem; }
+#bb-boote .bb-boot-kopf.ohne-bild { grid-template-columns: minmax(0, 1fr); }
+#bb-boote .bb-boot-titelbild { display: block; border-radius: var(--bb-radius); overflow: hidden; box-shadow: var(--bb-shadow); background: var(--bb-surface-2); }
+#bb-boote .bb-boot-titelbild img { display: block; width: 100%; height: auto; max-height: 34rem; object-fit: cover; }
+#bb-boote .bb-boot-steckbrief h2 { margin: 0 0 0.25rem; font-size: 1.6rem; }
+#bb-boote .bb-boot-steckbrief .bb-boot-fakten { margin-bottom: 0.75rem; }
+#bb-boote .bb-wartung-ok {
+  max-width: 40rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--bb-radius-sm);
+  border-left: 4px solid var(--bb-accent);
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint);
+}
+#bb-boote .bb-wartung-hinweis { margin: 0; color: var(--bb-muted); font-size: 0.9rem; }
+
+@media (max-width: 640px) {
+  #bb-boote .bb-boot-kopf { grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+  #bb-boote .bb-boot-titelbild img { max-height: 70vh; }
+  #bb-boote .bb-wartung-zeile { flex-direction: column; gap: 0.75rem; }
 }

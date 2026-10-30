@@ -3,7 +3,7 @@
 # Bootsbuchung für Vereine
 
 Eine fertige **Online-Bootsbuchung für Segel- und Wassersportvereine** –
-mit Kursen, „Mitsegler willkommen“, Meldungen an den Bootswart und einer
+mit Kursen, „Mitsegler willkommen“, Bootsübersicht, Wartungs-Logbuch und einer
 modernen Oberfläche für Handy und Computer. Mit **einem Befehl** auf einem
 frischen Linux-Server installiert.
 
@@ -50,10 +50,33 @@ The user interface is German.*
 - Alle kommenden Kurse und Mitsegelgelegenheiten mit freien Plätzen
 - Filter „Meine“: eigene Buchungen und Anmeldungen auf einen Blick
 
+**Bootsübersicht für Mitglieder**
+- Menüpunkt „Boote“: alle Boote als Kacheln, pro Boot eine Seite mit
+  Titelbild, Bootsdaten (Länge, Breite, Tiefgang, Masthöhe, Gewicht),
+  Infotext, Bildern und Dokumenten (Handbuch, Checklisten …)
+- Bilder und Dokumente liegen in einem freigegebenen Ordner (z. B. in der
+  Vereins-Nextcloud), die Buchung zeigt sie direkt an
+- Die Verwaltung der Boote („Verwaltung“) sehen nur Admins
+
+**Wartungs-Logbuch und Schadensmeldungen**
+- Pro Boot ein Logbuch: wer hat wann was gemacht, Material, Stunden, Kosten.
+  Lesen dürfen alle, eintragen die Rolle **Bootswartung** und Admins
+- **Schaden melden** mit Text und Fotos direkt von der Bootsseite – geht als
+  offener Eintrag ins Logbuch und per Mail an Bootswart und Boot-Paten
+- „Schaden behoben“ mit Notiz, das meldende Mitglied bekommt eine Mail
+- **Wartungsbericht** über alle Boote mit Filter, Summen und CSV für Excel
+
 **Meldungen an Bootswart und Boot-Paten**
 - Steht bei einer Buchung etwas im Feld „Gibt es etwas zu melden?“
   (Schaden, fehlende Ausrüstung …), geht eine Mail an den **Bootswart** und
   den **Paten des Boots** – Adressen pflegt der Admin direkt in der Webseite
+- Optional: pro Boot ein Link zu den **Bootsunterlagen** und eine
+  **Fotoablage** für Schadensfotos; Fotos lassen sich direkt aus der Buchung
+  hochladen
+
+**Benutzerliste**
+- Vorname und Nachname getrennt sortierbar
+- Normale Mitglieder sehen nur Namen und Rechte, keine Mailadressen
 
 | | |
 |---|---|
@@ -106,12 +129,16 @@ Einrichtung des Proxy Managers (dauert 2 Minuten):
 ### Erste Schritte in der Buchung
 
 1. Mit dem Admin-Konto anmelden
-2. **Boote** → Bereich „Boote“ → Boote anlegen.
+2. **Verwaltung** → Bereich „Boote“ → Boote anlegen.
    *Kapazität* = Plätze im Boot **einschließlich** Schiffsführer
 3. Im Bereich „Boote“ (bearbeiten) die **E-Mail-Adresse des Bootswarts**
    eintragen, bei jedem Boot optional die des **Boot-Paten**
 4. **Benutzerliste** → Mitglieder anlegen. Segellehrern den Haken
-   **„Segellehrer“** setzen
+   **„Segellehrer“** setzen, wer die Boote pflegt, den Haken
+   **„Bootswartung“** (darf ins Wartungs-Logbuch schreiben)
+5. Optional: unter **Boot bearbeiten** Bootsdaten, „Infos für Mitglieder“
+   und die Links zu Unterlagen und Fotoablage eintragen (siehe
+   „Bootsübersicht und Unterlagen“)
 
 ## Betrieb
 
@@ -155,7 +182,7 @@ Webseite.
   „App installieren“, auf dem iPhone in Safari „Teilen → Zum Home-Bildschirm“.
 
 **Push-Benachrichtigungen:** Jedes Mitglied schaltet Push unter
-**Benachrichtigungen** (Handy: unten „Hinweise“) für sein Gerät ein. Danach
+**Benachrichtigungen** (Handy: unter „Mehr“) für sein Gerät ein. Danach
 kommt jede Mail der Buchung (Anmeldungen, Absagen, Erinnerungen,
 Bootswart-Meldungen) zusätzlich sofort als Nachricht aufs Handy. Wer mag,
 hakt „Keine Mails mehr“ an – die Mail kommt dann nur noch, wenn die
@@ -190,6 +217,50 @@ eckig zuschneidet).
 **Zum Prüfen** (Chrome am PC): F12 → „Application“ → „Manifest“ zeigt Name
 und Symbole, unter „Service workers“ ist `sw.php` aktiviert.
 
+## Bootsübersicht und Unterlagen
+
+Alles wird unter **Verwaltung → Boot bearbeiten** gepflegt (nur Admins):
+
+- **Bootsdaten:** Länge üA, Breite üA, Tiefgang, Masthöhe, Gewicht – freier
+  Text mit Einheit, z. B. `6,50 m`. Leere Felder erscheinen nicht.
+- **Infos für Mitglieder:** reiner Text (Liegeplatz, Schlüssel …), Leerzeile
+  = neuer Absatz, `https://`-Links werden klickbar.
+- **Unterlagen (Link):** Freigabelink eines Nextcloud-Ordners (ohne Passwort,
+  nur lesen). Die Buchung liest den Ordner über die öffentliche
+  WebDAV-Schnittstelle der Freigabe und zeigt Bilder als Galerie, alles
+  andere als Dokument zum Herunterladen; Unterordner werden eigene Gruppen.
+  Kachelbild ist `titelbild.jpg` (oder `titel.*`, `cover.*`), sonst das erste
+  Bild. Der Inhalt wird 15 Minuten zwischengespeichert; Admins haben unten
+  auf der Bootsseite „Dateien neu laden“.
+- **Fotoablage (Link):** ein *eigener* Nextcloud-Ordner pro Boot, geteilt mit
+  der Option **„Dateiablage“** (nur hochladen). Mitglieder laden Schadensfotos
+  dann direkt aus der Buchung oder der Schadensmeldung hoch. Für Boote ohne
+  eigenen Link gilt `$bb_fotos_url` aus der `config.inc.php`.
+
+In der `config.inc.php` (optional, Vorlage steht schon auskommentiert drin):
+
+```php
+// Gemeinsame Fotoablage für Boote ohne eigene:
+$bb_fotos_url = 'https://cloud.mein-verein.de/s/…';
+// Ordner der Schadensfotos zum Ansehen, als Link in den Mails an
+// Bootswart/Boot-Paten ({boot} = Bootsname = Ordnername):
+$bb_fotos_ordner_url = 'https://cloud.mein-verein.de/apps/files/?dir=/Schadensfotos/{boot}';
+```
+
+Ohne Nextcloud funktionieren Bootsübersicht, Bootsdaten, Infotext,
+Wartungs-Logbuch und Schadensmeldungen trotzdem – es fehlen dann nur Bilder,
+Dokumente und der Foto-Upload. Links müssen mit `http://` oder `https://`
+anfangen. Andere Cloud-Dienste gehen für die reinen Links auch, Galerie und
+Upload brauchen eine Nextcloud-Freigabe.
+
+**Wartungsbericht:** im Menü „Bericht“ bzw. im Logbuch über „Bericht“ – alle
+Einträge aller Boote mit Filter (Zeitraum, Boot, Art, Status, Suche), Summen
+für Stunden und Kosten je Boot und Download als CSV (für Excel).
+
+**Rolle Bootswartung:** Haken beim Benutzer, den nur Admins setzen dürfen
+(`bootswartung` steht in `$auth['db']['protected_fields']`; bei älteren
+Installationen ergänzt `update.sh` das).
+
 ## Wie ist das aufgebaut?
 
 MRBS selbst liegt **nicht** in diesem Repo. `update.sh` holt die gewünschte
@@ -208,9 +279,12 @@ patches/              Änderungen am MRBS-Code
   app-head              bindet theme/verein/head.inc ein (App-Manifest, Symbole, Service Worker)
   app-assetlinks        /.well-known/assetlinks.json für die Android-App
   push                  Push-Benachrichtigungen, Seite „Benachrichtigungen“
+  unterlagen            Links zu Bootsunterlagen und Fotoablage, Foto-Upload in die Nextcloud
+  bootsuebersicht       Seite „Boote“, Wartungs-Logbuch, Schaden melden, Wartungsbericht; Verwaltung nur für Admins
+  benutzerliste         Vor-/Nachname getrennt, Mitglieder sehen nur Namen und Rechte
 theme/verein/         Aussehen (hell/dunkel, Handy-Ansicht wie eine App), Formular-Hilfen, Teilnehmerliste
   app/                  App-Manifest, Symbole, Service Worker, Offline-Seite
-sql/                  zusätzliche Datenbankfelder (Segellehrer, Kurs, Push)
+sql/                  zusätzliche Datenbankfelder (Segellehrer, Kurs, Push, Boote, Logbuch)
 maintenance/          nächtliche Wartung: Sicherung, Sitzungen aufräumen, Erinnerung
 tools/mailtest.php    prüft den Mailversand
 tools/push-schluessel.php  erzeugt den Schlüssel für Push
