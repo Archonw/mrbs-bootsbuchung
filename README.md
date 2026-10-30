@@ -74,6 +74,11 @@ The user interface is German.*
   **Fotoablage** für Schadensfotos; Fotos lassen sich direkt aus der Buchung
   hochladen
 
+**Saison (Buchungszeitraum)**
+- Saisonbeginn und -ende stellt der Admin unter **Verwaltung →
+  Buchungszeitraum (Saison)** ein – außerhalb kann niemand buchen.
+  Leeres Feld = keine Grenze
+
 **Benutzerliste**
 - Vorname und Nachname getrennt sortierbar
 - Normale Mitglieder sehen nur Namen und Rechte, keine Mailadressen
@@ -136,7 +141,9 @@ Einrichtung des Proxy Managers (dauert 2 Minuten):
 4. **Benutzerliste** → Mitglieder anlegen. Segellehrern den Haken
    **„Segellehrer“** setzen, wer die Boote pflegt, den Haken
    **„Bootswartung“** (darf ins Wartungs-Logbuch schreiben)
-5. Optional: unter **Boot bearbeiten** Bootsdaten, „Infos für Mitglieder“
+5. **Verwaltung** → „Buchungszeitraum (Saison)“: Saisonbeginn und -ende
+   eintragen (oder leer lassen, dann ganzjährig buchbar)
+6. Optional: unter **Boot bearbeiten** Bootsdaten, „Infos für Mitglieder“
    und die Links zu Unterlagen und Fotoablage eintragen (siehe
    „Bootsübersicht und Unterlagen“)
 
@@ -282,6 +289,7 @@ patches/              Änderungen am MRBS-Code
   unterlagen            Links zu Bootsunterlagen und Fotoablage, Foto-Upload in die Nextcloud
   bootsuebersicht       Seite „Boote“, Wartungs-Logbuch, Schaden melden, Wartungsbericht; Verwaltung nur für Admins
   benutzerliste         Vor-/Nachname getrennt, Mitglieder sehen nur Namen und Rechte
+  buchungszeitraum      Saisonbeginn/-ende in der Verwaltung einstellen
 theme/verein/         Aussehen (hell/dunkel, Handy-Ansicht wie eine App), Formular-Hilfen, Teilnehmerliste
   app/                  App-Manifest, Symbole, Service Worker, Offline-Seite
 sql/                  zusätzliche Datenbankfelder (Segellehrer, Kurs, Push, Boote, Logbuch)
