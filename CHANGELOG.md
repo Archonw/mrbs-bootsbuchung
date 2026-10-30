@@ -6,6 +6,38 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-10-31 – Bootsübersicht, Wartungs-Logbuch, Benutzerliste
+
+- **Bootsübersicht:** Neuer Menüpunkt „Boote“ (am Handy auch unten in der
+  App-Leiste) mit allen Booten als Kacheln. Pro Boot eine Seite mit
+  Titelbild, Bootsdaten (Länge üA, Breite üA, Tiefgang, Masthöhe, Gewicht),
+  „Infos für Mitglieder“, Bildern und Dokumenten aus einem freigegebenen
+  Nextcloud-Ordner.
+- **Wartungs-Logbuch** pro Boot: Arbeiten mit Datum, Wer, Material, Stunden,
+  Kosten. Lesen alle, schreiben die neue Rolle **Bootswartung** und Admins.
+- **Schaden melden** mit Text und Fotos; „Schaden behoben“ mit Notiz und Mail
+  an das meldende Mitglied; eigene offene Meldungen ändern; beim Löschen
+  einer Meldung eine Mail an den Admin mit den zugehörigen Fotos.
+- **Wartungsbericht** über alle Boote mit Filter, Summen und CSV-Download.
+- **Bootsunterlagen und Fotoablage:** pro Boot ein Link zu den Unterlagen und
+  eine Fotoablage (Nextcloud-„Dateiablage“); Schadensfotos lassen sich direkt
+  aus der Buchung hochladen.
+- **Benutzerliste:** Vorname und Nachname getrennt sortierbar; normale
+  Mitglieder sehen nur Namen und Rechte (keine Mailadressen, keine Exporte).
+- **Menü:** „Verwaltung“ statt „Boot auswählen“ (nur noch für Admins),
+  Reihenfolge: erst Mitglieder-, dann Admin-Punkte, Hilfe zuletzt. Am Handy
+  öffnet „Mehr“ ein Blatt von unten; „Hinweise“ ist aus der App-Leiste
+  heraus (Benachrichtigungen unter „Mehr“), dafür gibt es „Boote“.
+
+Für bestehende Installationen ist nichts von Hand zu tun: `update.sh` legt
+die neuen Spalten und die Tabelle `mrbs_bb_wartung` an und ergänzt in der
+`config.inc.php` die Beschriftungen sowie
+`$auth['db']['protected_fields'][] = 'bootswartung';` (damit sich niemand die
+Rolle selbst geben kann). Danach die Links und Bootsdaten unter
+**Verwaltung → Boot bearbeiten** eintragen und Bootswarten den Haken
+„Bootswartung“ geben. Wer `$bb_fotos_url` oder `$bb_fotos_ordner_url` nutzen
+will, siehe README, Abschnitt „Bootsübersicht und Unterlagen“.
+
 ## 2026-10-30 – App fürs Handy und Push-Benachrichtigungen
 
 - **Als App installierbar:** Die Buchung bringt ein App-Manifest, Symbole und

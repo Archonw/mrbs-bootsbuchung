@@ -283,7 +283,8 @@ unset(\$booking_types);                  // keine Buchungstypen
 \$enable_registration = true;
 \$enable_registration_users = true;
 \$auth['show_registrant_names'] = true;
-\$auth['db']['protected_fields'] = array('level', 'name', 'display_name', 'segellehrer');
+// Diese Felder darf nur ein Admin ändern (sonst gäbe sich jeder die Rollen selbst)
+\$auth['db']['protected_fields'] = array('level', 'name', 'display_name', 'segellehrer', 'bootswartung');
 \$vocab_override['de']['users.segellehrer']            = 'Segellehrer';
 \$vocab_override['de']['entry.kurs']                   = 'Als Kurs anbieten';
 \$vocab_override['de']['allow_registration']           = 'Mitsegler willkommen';
@@ -298,6 +299,25 @@ unset(\$booking_types);                  // keine Buchungstypen
 \$vocab_override['de']['registration_level_limited_with_names']   = ' · %1\$d/%2\$d: %3\$s';
 \$vocab_override['de']['registration_level_unlimited_with_names'] = ' · %1\$d: %2\$s';
 \$vocab_override['de']['confirm_edit_series'] = 'Für diese Reihe sind Mitglieder angemeldet. Ihre Anmeldungen werden auf die geänderten Termine übertragen, sie bekommen eine Mail. Fortfahren?';
+
+// --- Bootsübersicht, Bootsdaten und Wartungs-Logbuch ---
+// Felder unter "Boot bearbeiten" (nur Admins) und Rolle "Bootswartung" beim Benutzer
+\$vocab_override['de']['room.infos']          = 'Infos für Mitglieder';
+\$vocab_override['de']['room.laenge']         = 'Länge üA';
+\$vocab_override['de']['room.breite']         = 'Breite üA';
+\$vocab_override['de']['room.tiefgang']       = 'Tiefgang';
+\$vocab_override['de']['room.masthoehe']      = 'Masthöhe';
+\$vocab_override['de']['room.gewicht']        = 'Gewicht';
+\$vocab_override['de']['users.bootswartung']  = 'Bootswartung';
+
+// --- Bootsunterlagen und Schadensfotos (Links, z. B. in eine Nextcloud) ---
+// Pro Boot unter "Boot bearbeiten" eintragen, siehe README "Bootsübersicht".
+\$vocab_override['de']['room.unterlagen'] = 'Unterlagen (Link)';
+\$vocab_override['de']['room.fotos']      = 'Fotoablage (Link)';
+// Gemeinsame Fotoablage für Boote ohne eigene (Nextcloud-Freigabe "Dateiablage"):
+// \$bb_fotos_url = 'https://cloud.mein-verein.de/s/…';
+// Ordner der Schadensfotos zum Ansehen (Link in den Mails), {boot} = Bootsname:
+// \$bb_fotos_ordner_url = 'https://cloud.mein-verein.de/apps/files/?dir=/Schadensfotos/{boot}';
 
 // --- Push-Benachrichtigungen (Schlüssel \$bb_push steht ganz unten) ---
 // Push läuft über den Mailversand: Jede Mail an ein Mitglied kommt zusätzlich
@@ -341,6 +361,9 @@ step "MRBS $MRBS_VERSION mit allen Anpassungen bauen (dauert einige Minuten)"
 
 cp sql/kursbuchung.sql data/initdb/020-kursbuchung.sql
 cp sql/push.sql data/initdb/030-push.sql
+cp sql/unterlagen.sql data/initdb/040-unterlagen.sql
+cp sql/bootsuebersicht.sql data/initdb/050-bootsuebersicht.sql
+cp sql/wartung.sql data/initdb/060-wartung.sql
 
 step "Schlüssel für Push-Benachrichtigungen erzeugen"
 # Kontakt für die Push-Dienste: die Admin-Mail, sonst die Adresse der Buchung
@@ -418,8 +441,10 @@ esac
 cat <<EOF
 
 Als Nächstes in der Buchung:
-  - "Boote" → Bereich "Boote" → Boote anlegen (Name, Kapazität = Plätze inkl. Schiffsführer)
-  - "Benutzerliste" → Mitglieder anlegen, Segellehrern den Haken "Segellehrer" geben
+  - "Verwaltung" → Bereich "Boote" → Boote anlegen (Name, Kapazität = Plätze inkl. Schiffsführer,
+    optional Bootsdaten, Infotext und Links zu Unterlagen/Fotoablage)
+  - "Benutzerliste" → Mitglieder anlegen, Segellehrern den Haken "Segellehrer" geben,
+    wer Boote pflegt, bekommt den Haken "Bootswartung" (Wartungs-Logbuch)
 
 Programmordner: $INSTALL_DIR   (Einstellungen: config/config.inc.php)
 Aktualisieren:  sudo $INSTALL_DIR/update.sh

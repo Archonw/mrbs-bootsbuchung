@@ -1,0 +1,1789 @@
+diff --git a/web/mrbs_auth.inc b/web/mrbs_auth.inc
+index d871f01..dc70588 100644
+--- a/web/mrbs_auth.inc
++++ b/web/mrbs_auth.inc
+@@ -110,7 +110,9 @@ function get_page_level($page)
+     // should be able to access them because they will have read access and in some
+     // cases write access for their own entries.   Where necessary further checks are
+     // made within the page to prevent ordinary users gaining access to admin features.
+-    case 'admin.php':
++    // Bootsbuchung-Anpassung (bootsuebersicht.patch): admin.php ("Boot auswählen",
++    // Bereiche und Boote) nur für Admins – Mitglieder haben die Bootsübersicht
++    // bb_boote.php. Fällt damit unter "default" weiter unten.
+     case 'approve_entry_handler.php':   // Ordinary users are allowed to remind admins
+     case 'edit_message.php':            // Booking admins can edit messages
+     case 'edit_message_handler.php':    // Booking admins can edit messages
+diff --git a/web/bb_boote.inc b/web/bb_boote.inc
+new file mode 100644
+index 0000000..6597ae2
+--- /dev/null
++++ b/web/bb_boote.inc
+@@ -0,0 +1,234 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Dateien eines Bootes aus der Vereins-Nextcloud
++//
++// Grundlage ist der Link im Feld "Unterlagen (Link)" (mrbs_room.unterlagen,
++// aus unterlagen.patch): eine öffentliche Nextcloud-Freigabe des Bootsordners.
++// Der Server liest den Ordner über die öffentliche WebDAV-Schnittstelle der
++// Freigabe aus (ohne Nextcloud-Konto) und merkt sich das Ergebnis eine
++// Viertelstunde. Bilder werden als Vorschau direkt von der Nextcloud geladen,
++// PDFs und andere Dateien als Download-Link.
++//
++// Ordner-Aufbau in der Nextcloud (Beispiel):
++//   Boote/Jolle 1/            ← dieser Ordner ist freigegeben
++//     titelbild.jpg           ← Bild für die Kachel (sonst das erste Bild)
++//     Aufbau.pdf
++//     Bilder/…                ← Unterordner erscheinen als eigene Gruppe
++//     Anleitungen/…
++//
++// Freigaben mit Passwort werden nicht unterstützt.
++// =============================================================================
++
++require_once 'bb_unterlagen.inc';
++
++const BB_BOOTE_CACHE_SEK = 900;
++const BB_BOOTE_MAX_ORDNER = 8;      // Unterordner, die mitgelesen werden
++const BB_BOOTE_BILD = '/\.(jpe?g|png|gif|webp|heic)$/i';
++
++
++// Zerlegt einen Freigabelink https://host[/index.php]/s/TOKEN[...] in
++// ['base' => 'https://host', 'token' => 'TOKEN']
++function bb_nc_freigabe(?string $url) : ?array
++{
++  if (!bb_link_ok($url) ||
++      !preg_match('#^(https?://[^/?\#]+(?:/[^?\#]*?)?)/s/([A-Za-z0-9]+)#', trim($url), $m))
++  {
++    return null;
++  }
++
++  return ['base' => preg_replace('#/index\.php$#', '', $m[1]), 'token' => $m[2]];
++}
++
++
++// Ein PROPFIND (Tiefe 1) auf einen Pfad in der Freigabe.
++// Liefert Einträge ['name', 'pfad', 'ordner', 'typ', 'groesse'] oder null bei Fehler.
++function bb_nc_propfind(array $f, string $pfad) : ?array
++{
++  $dav = $f['base'] . '/public.php/webdav';
++  $url = $dav . implode('/', array_map('rawurlencode', explode('/', $pfad)));
++  $body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop>' .
++          '<d:resourcetype/><d:getcontenttype/><d:getcontentlength/>' .
++          '</d:prop></d:propfind>';
++  $context = stream_context_create(['http' => [
++    'method'        => 'PROPFIND',
++    'header'        => "Authorization: Basic " . base64_encode($f['token'] . ':') . "\r\n" .
++                       "Depth: 1\r\n" .
++                       "Content-Type: application/xml; charset=utf-8\r\n",
++    'content'       => $body,
++    'timeout'       => 4,
++    'ignore_errors' => true
++  ]]);
++
++  $xml = @file_get_contents($url, false, $context);
++  $status = 0;
++  foreach ($http_response_header ?? [] as $h)
++  {
++    if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m))
++    {
++      $status = (int) $m[1];
++    }
++  }
++  if ($xml === false || $status !== 207)
++  {
++    return null;
++  }
++
++  $doc = @simplexml_load_string($xml);
++  if ($doc === false)
++  {
++    return null;
++  }
++  $doc->registerXPathNamespace('d', 'DAV:');
++
++  $prefix = parse_url($dav, PHP_URL_PATH);
++  $eintraege = [];
++  foreach ($doc->xpath('//d:response') as $r)
++  {
++    $r->registerXPathNamespace('d', 'DAV:');
++    $href = rawurldecode((string) ($r->xpath('d:href')[0] ?? ''));
++    $rel = '/' . trim(substr($href, strlen($prefix)), '/');
++    if ($rel === rtrim($pfad, '/') || $rel === '/' || $rel === $pfad)
++    {
++      continue;   // der Ordner selbst
++    }
++    $name = basename($rel);
++    if ($name === '' || $name[0] === '.')
++    {
++      continue;
++    }
++    $eintraege[] = [
++      'name'    => $name,
++      'pfad'    => $rel,
++      'ordner'  => count($r->xpath('.//d:resourcetype/d:collection')) > 0,
++      'typ'     => (string) ($r->xpath('.//d:getcontenttype')[0] ?? ''),
++      'groesse' => (int) ($r->xpath('.//d:getcontentlength')[0] ?? 0)
++    ];
++  }
++  usort($eintraege, function ($a, $b) {
++    return strnatcasecmp($a['name'], $b['name']);
++  });
++
++  return $eintraege;
++}
++
++
++// Alle Dateien der Freigabe, gruppiert nach Ordner:
++//   ['ok' => bool, 'gruppen' => ['' => [Datei, …], 'Bilder' => […], …]]
++// $neu = true: Zwischenspeicher übergehen
++function bb_nc_dateien(?string $url, bool $neu=false) : array
++{
++  $f = bb_nc_freigabe($url);
++  if (!isset($f))
++  {
++    return ['ok' => false, 'gruppen' => []];
++  }
++
++  $cache = sys_get_temp_dir() . '/bb-boote-' . md5($f['base'] . '|' . $f['token']) . '.json';
++  $alt = null;
++  if (is_readable($cache))
++  {
++    $alt = json_decode((string) file_get_contents($cache), true);
++    if (!$neu && is_array($alt) && (time() - filemtime($cache) < BB_BOOTE_CACHE_SEK))
++    {
++      return $alt;
++    }
++  }
++
++  $wurzel = bb_nc_propfind($f, '/');
++  if (!isset($wurzel))
++  {
++    // Nextcloud nicht erreichbar: lieber den alten Stand zeigen als nichts.
++    // Den Fehler ebenfalls merken, sonst wartet jede Seite erneut auf die Zeitüberschreitung.
++    $ergebnis = is_array($alt) ? $alt : ['ok' => false, 'gruppen' => []];
++    @file_put_contents($cache, json_encode($ergebnis), LOCK_EX);
++    return $ergebnis;
++  }
++
++  $gruppen = ['' => []];
++  $n = 0;
++  foreach ($wurzel as $e)
++  {
++    if (!$e['ordner'])
++    {
++      $gruppen[''][] = $e;
++    }
++    elseif ($n++ < BB_BOOTE_MAX_ORDNER)
++    {
++      $inhalt = bb_nc_propfind($f, $e['pfad']);
++      $gruppen[$e['name']] = array_values(array_filter($inhalt ?? [], function ($d) {
++        return !$d['ordner'];
++      }));
++    }
++  }
++
++  $ergebnis = ['ok' => true, 'gruppen' => $gruppen];
++  @file_put_contents($cache, json_encode($ergebnis), LOCK_EX);
++
++  return $ergebnis;
++}
++
++
++function bb_nc_ist_bild(array $datei) : bool
++{
++  return (strpos($datei['typ'], 'image/') === 0) || preg_match(BB_BOOTE_BILD, $datei['name']);
++}
++
++
++// Download-Link einer Datei in der Freigabe
++function bb_nc_download(string $url, array $datei) : string
++{
++  $f = bb_nc_freigabe($url);
++  return $f['base'] . '/s/' . $f['token'] . '/download?' .
++         http_build_query(['path' => dirname($datei['pfad']), 'files' => $datei['name']], '', '&', PHP_QUERY_RFC3986);
++}
++
++
++// Vorschaubild (von der Nextcloud verkleinert)
++function bb_nc_vorschau(string $url, array $datei, int $breite=640, int $hoehe=480) : string
++{
++  $f = bb_nc_freigabe($url);
++  return $f['base'] . '/index.php/apps/files_sharing/publicpreview/' . $f['token'] . '?' .
++         http_build_query(['file' => $datei['pfad'], 'x' => $breite, 'y' => $hoehe, 'a' => 1], '', '&', PHP_QUERY_RFC3986);
++}
++
++
++// Bild für die Kachel: "titelbild.*" (auch "titel.*", "cover.*"),
++// sonst das erste Bild im Ordner, sonst das erste in einem Unterordner
++function bb_nc_titelbild(array $dateien) : ?array
++{
++  $erstes = null;
++  foreach ($dateien['gruppen'] ?? [] as $gruppe)
++  {
++    foreach ($gruppe as $d)
++    {
++      if (!bb_nc_ist_bild($d))
++      {
++        continue;
++      }
++      if (preg_match('/^(titelbild|titel|cover)\./i', $d['name']))
++      {
++        return $d;
++      }
++      $erstes = $erstes ?? $d;
++    }
++  }
++
++  return $erstes;
++}
++
++
++function bb_groesse(int $bytes) : string
++{
++  if ($bytes <= 0)
++  {
++    return '';
++  }
++  if ($bytes < 1024 * 1024)
++  {
++    return max(1, (int) round($bytes / 1024)) . ' KB';
++  }
++  return number_format($bytes / 1024 / 1024, 1, ',', '.') . ' MB';
++}
+diff --git a/web/bb_boote.php b/web/bb_boote.php
+new file mode 100644
+index 0000000..168be52
+--- /dev/null
++++ b/web/bb_boote.php
+@@ -0,0 +1,350 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Bootsübersicht für Mitglieder
++//
++//   bb_boote.php            alle Boote als Kacheln mit Bild und Name
++//   bb_boote.php?boot=ID    ein Boot: Infos, Bilder, Dokumente (PDFs …)
++//
++// Bilder und Dokumente kommen aus dem Nextcloud-Ordner im Feld
++// "Unterlagen (Link)" (siehe bb_boote.inc), der Text aus dem Feld
++// "Infos für Mitglieder" (mrbs_room.infos, sql/bootsuebersicht.sql), die
++// Tabelle "Bootsdaten" aus den Feldern in BB_BOOTSDATEN (ebenfalls Spalten in
++// mrbs_room) und die letzten Einträge aus dem Wartungs-Logbuch (bb_wartung.php).
++// Nur für angemeldete Benutzer. Der Menüpunkt kommt aus Themes/verein/theme.js.
++// Admins können mit &neu=1 den Zwischenspeicher übergehen.
++// =============================================================================
++
++require "defaultincludes.inc";
++require_once "bb_boote.inc";
++require_once "bb_wartung.inc";
++
++// Bootsdaten: Spalte => Bezeichnung auf der Bootsseite (Reihenfolge = Anzeige)
++const BB_BOOTSDATEN = [
++  'laenge'    => 'Länge üA',
++  'breite'    => 'Breite üA',
++  'tiefgang'  => 'Tiefgang',
++  'masthoehe' => 'Masthöhe',
++  'gewicht'   => 'Gewicht'
++];
++
++// Gleiche Berechtigung wie die Suche: angemeldete Benutzer
++checkAuthorised('search.php');
++
++$boot = get_form_var('boot', 'int');
++$neu  = is_admin() && (get_form_var('neu', 'string') === '1');
++
++$hat_infos = db()->field_exists(_tbl('room'), 'infos');
++$datenspalten = array_values(array_filter(array_keys(BB_BOOTSDATEN), function ($c) {
++  return db()->field_exists(_tbl('room'), $c);
++}));
++$hat_unterlagen = db()->field_exists(_tbl('room'), 'unterlagen');
++
++$sql = "SELECT R.id, R.area_id, R.room_name, R.description, R.capacity" .
++       ($hat_infos ? ", R.infos" : "") .
++       implode('', array_map(function ($c) { return ", R.$c"; }, $datenspalten)) .
++       ($hat_unterlagen ? ", R.unterlagen" : "") . "
++          FROM " . _tbl('room') . " R
++          JOIN " . _tbl('area') . " A ON A.id = R.area_id
++         WHERE R.disabled = 0 AND A.disabled = 0" .
++       (isset($boot) ? " AND R.id = ?" : "") . "
++      ORDER BY A.sort_key, A.area_name, R.sort_key, R.room_name";
++$res = db()->query($sql, isset($boot) ? [$boot] : []);
++
++$boote = [];
++while (false !== ($row = $res->next_row_keyed()))
++{
++  if (is_visible((int) $row['id']))
++  {
++    $boote[] = $row;
++  }
++}
++
++
++// Text aus "Infos für Mitglieder": Zeilenumbrüche und Links übernehmen,
++// sonst reiner Text (kein HTML)
++function bb_infos_html(string $text) : string
++{
++  $html = escape_html(trim($text));
++  $html = preg_replace_callback('#https?://[^\s<]+[^\s<.,;:!?)\]]#i', function ($m) {
++    return '<a href="' . $m[0] . '" target="_blank" rel="noopener">' . $m[0] . '</a>';
++  }, $html);
++
++  return '<p>' . preg_replace('/(\r?\n){2,}/', '</p><p>', nl2br($html, false)) . '</p>';
++}
++
++
++// Bootsdaten als Tabelle, leere Felder fallen weg
++function bb_daten_html(array $b) : string
++{
++  $zeilen = '';
++  foreach (BB_BOOTSDATEN as $spalte => $bezeichnung)
++  {
++    $wert = trim((string) ($b[$spalte] ?? ''));
++    if ($wert !== '')
++    {
++      $zeilen .= '<tr><th scope="row">' . escape_html($bezeichnung) . '</th><td>' . escape_html($wert) . "</td></tr>\n";
++    }
++  }
++
++  return ($zeilen === '') ? '' : "<table class=\"bb-boot-daten\">\n$zeilen</table>\n";
++}
++
++
++function bb_boot_kachel(array $b) : string
++{
++  $dateien = bb_nc_dateien($b['unterlagen'] ?? null);
++  $bild = bb_nc_titelbild($dateien);
++
++  $html = '<li><a class="bb-boot-kachel" href="' . escape_html(multisite('bb_boote.php?boot=' . (int) $b['id'])) . '">';
++  if (isset($bild))
++  {
++    $html .= '<img src="' . escape_html(bb_nc_vorschau($b['unterlagen'], $bild)) . '" alt="" loading="lazy">';
++  }
++  else
++  {
++    $html .= '<span class="bb-boot-ohne-bild" aria-hidden="true">⛵</span>';
++  }
++  $html .= '<span class="bb-boot-name">' . escape_html($b['room_name']) . '</span>';
++  if (!empty($b['description']))
++  {
++    $html .= '<span class="bb-boot-beschreibung">' . escape_html($b['description']) . '</span>';
++  }
++  $html .= "</a></li>\n";
++
++  return $html;
++}
++
++
++$context = array(
++    'view'      => $view,
++    'view_all'  => $view_all,
++    'year'      => $year,
++    'month'     => $month,
++    'day'       => $day,
++    'area'      => $area,
++    'room'      => $room ?? null
++  );
++
++print_header($context);
++
++echo "<div id=\"bb-boote\">\n";
++
++if (!isset($boot))
++{
++  // ---------- Übersicht ----------
++  echo "<h2>Unsere Boote</h2>\n";
++  echo "<p class=\"bb-intro\">Tippe auf ein Boot für Infos, Bilder und Anleitungen.</p>\n";
++  if (empty($boote))
++  {
++    echo "<p class=\"bb-leer\">Keine Boote vorhanden.</p>\n";
++  }
++  else
++  {
++    echo "<ul class=\"bb-boot-kacheln\">\n";
++    foreach ($boote as $b)
++    {
++      echo bb_boot_kachel($b);
++    }
++    echo "</ul>\n";
++  }
++}
++elseif (empty($boote))
++{
++  echo "<p class=\"bb-zurueck\"><a href=\"" . escape_html(multisite('bb_boote.php')) . "\">‹ Alle Boote</a></p>\n";
++  echo "<p class=\"bb-leer\">Dieses Boot gibt es nicht (mehr).</p>\n";
++}
++else
++{
++  // ---------- Ein Boot ----------
++  $b = $boote[0];
++  $link = $b['unterlagen'] ?? null;
++  $dateien = bb_nc_dateien($link, $neu);
++
++  echo "<p class=\"bb-zurueck\"><a href=\"" . escape_html(multisite('bb_boote.php')) . "\">‹ Alle Boote</a></p>\n";
++  // Kopf: Titelbild, daneben Name und Bootsdaten (am Handy untereinander)
++  $titel = bb_nc_titelbild($dateien);
++  echo '<div class="bb-boot-kopf' . (isset($titel) ? '' : ' ohne-bild') . "\">\n";
++  if (isset($titel))
++  {
++    echo '<a class="bb-boot-titelbild" href="' . escape_html(bb_nc_vorschau($link, $titel, 1600, 1600)) . '" target="_blank" rel="noopener">' .
++         '<img src="' . escape_html(bb_nc_vorschau($link, $titel, 900, 1200)) . '" alt="' . escape_html($b['room_name']) . "\"></a>\n";
++  }
++  echo "<div class=\"bb-boot-steckbrief\">\n";
++  echo "<h2>" . escape_html($b['room_name']) . "</h2>\n";
++
++  $fakten = [];
++  if (!empty($b['description']))
++  {
++    $fakten[] = escape_html($b['description']);
++  }
++  if ((int) $b['capacity'] > 0)
++  {
++    $fakten[] = (int) $b['capacity'] . ((int) $b['capacity'] === 1 ? ' Person' : ' Personen');
++  }
++  if (!empty($fakten))
++  {
++    echo '<p class="bb-boot-fakten">' . implode(' · ', $fakten) . "</p>\n";
++  }
++  $daten = bb_daten_html($b);
++  echo $daten;
++  echo "</div>\n</div>\n";
++
++  $woche = 'index.php?view=week&area=' . (int) $b['area_id'] . '&room=' . (int) $b['id'];
++  echo '<p class="bb-boot-knoepfe"><a class="bb-knopf" href="' . escape_html(multisite($woche)) . '">Belegung ansehen &amp; buchen</a>';
++  if (bb_wartung_aktiv())
++  {
++    echo ' <a class="bb-knopf zweitrangig" href="' . escape_html(multisite('bb_wartung.php?boot=' . (int) $b['id'] . '&schaden=1')) . '">Schaden melden</a>';
++  }
++  else
++  {
++    $fotos = bb_fotos_url((int) $b['id']);
++    if (isset($fotos))
++    {
++      echo ' <a class="bb-knopf zweitrangig" href="' . escape_html($fotos) . '" target="_blank" rel="noopener">Schaden melden: Fotos hochladen</a>';
++    }
++  }
++  echo "</p>\n";
++
++  if (!empty($b['infos']))
++  {
++    echo "<section class=\"bb-boot-infos\">\n" . bb_infos_html($b['infos']) . "\n</section>\n";
++  }
++
++  // Bilder und Dokumente, je Ordner eine Gruppe
++  $bilder = [];
++  $dokumente = [];
++  foreach ($dateien['gruppen'] as $ordner => $gruppe)
++  {
++    foreach ($gruppe as $d)
++    {
++      if (bb_nc_ist_bild($d))
++      {
++        if (!isset($titel) || $d['pfad'] !== $titel['pfad'])
++        {
++          $bilder[] = $d;   // das Titelbild steht schon oben
++        }
++      }
++      else
++      {
++        $dokumente[$ordner][] = $d;
++      }
++    }
++  }
++
++  if (!empty($bilder))
++  {
++    echo "<h3>Bilder</h3>\n<ul class=\"bb-boot-bilder\">\n";
++    foreach ($bilder as $d)
++    {
++      echo '<li><a href="' . escape_html(bb_nc_vorschau($link, $d, 1600, 1600)) . '" target="_blank" rel="noopener">' .
++           '<img src="' . escape_html(bb_nc_vorschau($link, $d, 480, 360)) . '" alt="' . escape_html(pathinfo($d['name'], PATHINFO_FILENAME)) . '" loading="lazy">' .
++           "</a></li>\n";
++    }
++    echo "</ul>\n";
++  }
++
++  if (!empty($dokumente))
++  {
++    echo "<h3>Dokumente</h3>\n";
++    foreach ($dokumente as $ordner => $gruppe)
++    {
++      if ($ordner !== '')
++      {
++        echo '<h4>' . escape_html($ordner) . "</h4>\n";
++      }
++      echo "<ul class=\"bb-boot-dokumente\">\n";
++      foreach ($gruppe as $d)
++      {
++        $endung = strtoupper(pathinfo($d['name'], PATHINFO_EXTENSION));
++        echo '<li><a href="' . escape_html(bb_nc_download($link, $d)) . '" target="_blank" rel="noopener">' .
++             '<span class="bb-dok-typ">' . escape_html($endung === '' ? 'Datei' : $endung) . '</span>' .
++             '<span class="bb-dok-name">' . escape_html(pathinfo($d['name'], PATHINFO_FILENAME)) . '</span>' .
++             '<span class="bb-dok-groesse">' . bb_groesse($d['groesse']) . '</span>' .
++             "</a></li>\n";
++      }
++      echo "</ul>\n";
++    }
++  }
++
++  // Wartung & Reparaturen: die letzten Einträge, alles auf bb_wartung.php
++  if (bb_wartung_aktiv())
++  {
++    $logbuch = multisite('bb_wartung.php?boot=' . (int) $b['id']);
++    $letzte = bb_wartung_eintraege((int) $b['id'], 3);
++    echo "<h3>Wartung &amp; Reparaturen</h3>\n";
++    if (empty($letzte))
++    {
++      echo "<p class=\"bb-intro\">Noch keine Einträge.</p>\n";
++    }
++    else
++    {
++      echo "<ul class=\"bb-wartung\">\n";
++      $darf = bb_ist_bootswartung();
++      foreach ($letzte as $e)
++      {
++        $aktionen = '';
++        if ($darf)
++        {
++          $aktionen = bb_wartung_aktionen_html($e, $logbuch);
++        }
++        elseif (bb_ist_eigene_meldung($e))
++        {
++          $aktionen = '<p class="bb-wartung-aktionen"><a href="' . escape_html($logbuch . '&aendern=' . (int) $e['id']) . '">Meldung ändern</a></p>';
++        }
++        echo bb_wartung_html($e, $aktionen);
++      }
++      echo "</ul>\n";
++    }
++    $anzahl = bb_wartung_anzahl((int) $b['id']);
++    echo '<p class="bb-boot-knoepfe">';
++    if ($anzahl > 3)
++    {
++      echo '<a class="bb-knopf zweitrangig" href="' . escape_html($logbuch) . '">Alle ' . $anzahl . ' Einträge</a> ';
++    }
++    elseif ($anzahl > 0)
++    {
++      echo '<a class="bb-knopf zweitrangig" href="' . escape_html($logbuch) . '">Logbuch öffnen</a> ';
++    }
++    if (bb_ist_bootswartung())
++    {
++      echo '<a class="bb-knopf zweitrangig" href="' . escape_html($logbuch . '&neu=1') . '">Eintrag hinzufügen</a>';
++    }
++    echo "</p>\n";
++  }
++
++  if (isset($link))
++  {
++    echo '<p class="bb-boot-ordner"><a href="' . escape_html($link) . '" target="_blank" rel="noopener">Ordner in der Nextcloud öffnen</a></p>' . "\n";
++  }
++
++  if (empty($b['infos']) && $daten === '' && empty($bilder) && empty($dokumente))
++  {
++    echo "<p class=\"bb-leer\">Zu diesem Boot gibt es noch keine Infos.</p>\n";
++  }
++
++  if (is_admin())
++  {
++    echo '<p class="bb-boot-admin">';
++    if (isset($link) && !$dateien['ok'])
++    {
++      echo '<strong>Der Nextcloud-Ordner ließ sich nicht lesen.</strong> Ist der Link eine Freigabe ohne Passwort? ';
++    }
++    elseif (!isset($link))
++    {
++      echo 'Für Bilder und Dokumente unter Boot bearbeiten den Nextcloud-Link bei „Unterlagen (Link)“ eintragen. ';
++    }
++    echo '<a href="' . escape_html(multisite('edit_room.php?room=' . (int) $b['id'])) . '">Boot bearbeiten</a>';
++    if (isset($link))
++    {
++      echo ' · <a href="' . escape_html(multisite('bb_boote.php?boot=' . (int) $b['id'] . '&neu=1')) . '">Dateien neu laden</a>';
++    }
++    echo "</p>\n";
++  }
++}
++
++echo "</div>\n";
++
++print_footer();
+diff --git a/web/bb_wartung.inc b/web/bb_wartung.inc
+new file mode 100644
+index 0000000..2087300
+--- /dev/null
++++ b/web/bb_wartung.inc
+@@ -0,0 +1,462 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Wartungs- und Reparatur-Logbuch pro Boot
++//
++//   mrbs_bb_wartung        ein Eintrag je Arbeit (sql/wartung.sql)
++//   mrbs_users.bootswartung Rolle "Bootswartung" (Haken beim Benutzer, nur Admins)
++//
++// Lesen dürfen alle angemeldeten Mitglieder, eintragen, ändern und löschen
++// nur Bootswartung und Admins. Seite: bb_wartung.php, die letzten Einträge
++// stehen zusätzlich auf der Bootsseite (bb_boote.php).
++//
++// Schaden melden darf jedes Mitglied: Die Meldung wird ein offener Eintrag
++// (art = 'meldung') und geht per Mail an Bootswart (E-Mail beim Verein) und
++// Boot-Paten (E-Mail beim Boot), wie bei bootswart-meldung.patch.
++// Ist der Schaden behoben, trägt die Bootswartung über „Schaden behoben“ ein,
++// was gemacht wurde (behebung, behoben_am); die Meldung bleibt im Eintrag
++// stehen, und wer gemeldet hat, bekommt eine Mail.
++// Solange eine Meldung offen ist, darf das Mitglied, das sie abgeschickt hat,
++// den Text ändern („Meldung ändern“); dann geht erneut eine Mail raus.
++// =============================================================================
++
++
++function bb_wartung_aktiv() : bool
++{
++  return db()->table_exists(_tbl('bb_wartung'));
++}
++
++
++// Spalten für „Schaden behoben“ vorhanden? (sql/wartung.sql, zweiter Teil)
++function bb_wartung_behebung_aktiv() : bool
++{
++  static $aktiv = null;
++  return $aktiv ?? ($aktiv = bb_wartung_aktiv() && db()->field_exists(_tbl('bb_wartung'), 'behebung'));
++}
++
++
++// Spalte für die Fotos einer Meldung vorhanden? (sql/wartung.sql, dritter Teil)
++function bb_wartung_fotos_aktiv() : bool
++{
++  static $aktiv = null;
++  return $aktiv ?? ($aktiv = bb_wartung_aktiv() && db()->field_exists(_tbl('bb_wartung'), 'fotos'));
++}
++
++
++// Dateinamen der Fotos aus dem Formular (theme.js schickt fotos[] mit, so wie
++// bb_fotos.php sie in der Fotoablage benannt hat)
++function bb_wartung_fotos_formular() : array
++{
++  $fotos = [];
++  foreach ((array) get_form_var('fotos', 'array') as $f)
++  {
++    $f = trim((string) $f);
++    if (preg_match('/^[\p{L}\p{N}][\p{L}\p{N}_.-]{0,150}$/u', $f) && !in_array($f, $fotos, true))
++    {
++      $fotos[] = $f;
++    }
++  }
++  return array_slice($fotos, 0, 30);
++}
++
++
++// Fotos eines Eintrags als Liste (Spalte fotos: ein Dateiname pro Zeile)
++function bb_wartung_fotos(array $e) : array
++{
++  return array_values(array_filter(array_map('trim', explode("\n", (string) ($e['fotos'] ?? '')))));
++}
++
++
++function bb_ist_meldung(array $e) : bool
++{
++  return (($e['art'] ?? '') === 'meldung');
++}
++
++
++// Eigene, noch offene Schadensmeldung? Die darf der Melder ändern.
++function bb_ist_eigene_meldung(array $e) : bool
++{
++  $user = session()->getCurrentUser();
++  return bb_ist_meldung($e) && empty($e['erledigt']) &&
++         isset($user) && ($user->username !== '') &&
++         (($e['erstellt_von'] ?? null) === $user->username);
++}
++
++
++// Bootswartung? Admins dürfen immer.
++function bb_ist_bootswartung(?User $user=null) : bool
++{
++  $user = $user ?? session()->getCurrentUser();
++  if (!isset($user) || ($user->username === ''))
++  {
++    return false;
++  }
++  if (is_admin())
++  {
++    return true;
++  }
++  try
++  {
++    $value = db()->query1("SELECT bootswartung FROM " . _tbl('users') . " WHERE name=? LIMIT 1",
++                          [$user->username]);
++  }
++  catch (\Throwable $e)
++  {
++    return false;   // Spalte fehlt
++  }
++  return ((int) $value) === 1;
++}
++
++
++// Einträge eines Bootes, neueste zuerst
++function bb_wartung_eintraege(int $room_id, ?int $limit=null) : array
++{
++  if (!bb_wartung_aktiv())
++  {
++    return [];
++  }
++  $sql = "SELECT * FROM " . _tbl('bb_wartung') . "
++           WHERE room_id=?
++        ORDER BY datum DESC, id DESC" .
++         (isset($limit) ? " LIMIT " . (int) $limit : "");
++  $res = db()->query($sql, [$room_id]);
++  $eintraege = [];
++  while (false !== ($row = $res->next_row_keyed()))
++  {
++    $eintraege[] = $row;
++  }
++
++  return $eintraege;
++}
++
++
++function bb_wartung_anzahl(int $room_id) : int
++{
++  if (!bb_wartung_aktiv())
++  {
++    return 0;
++  }
++  return (int) db()->query1("SELECT COUNT(*) FROM " . _tbl('bb_wartung') . " WHERE room_id=?", [$room_id]);
++}
++
++
++function bb_datum_de(?string $datum) : string
++{
++  $t = isset($datum) ? strtotime($datum) : false;
++  return ($t === false) ? '' : date('d.m.Y', $t);
++}
++
++
++// Datum eines Eintrags; bei Schadensmeldungen mit Uhrzeit der Meldung, damit
++// sich die Fotos (Dateiname beginnt mit Datum und Uhrzeit) zuordnen lassen
++function bb_wartung_wann(array $e) : string
++{
++  $datum = bb_datum_de($e['datum'] ?? null);
++  if (bb_ist_meldung($e) && !empty($e['erstellt_am']) &&
++      (date('Y-m-d', (int) $e['erstellt_am']) === (string) ($e['datum'] ?? '')))
++  {
++    $datum .= ', ' . date('H:i', (int) $e['erstellt_am']) . ' Uhr';
++  }
++  return $datum;
++}
++
++
++function bb_zahl_de($wert, int $stellen) : string
++{
++  return number_format((float) $wert, $stellen, ',', '.');
++}
++
++
++// Ein Eintrag als Karte; $aktionen = HTML für Bearbeiten/Löschen (oder '')
++function bb_wartung_html(array $e, string $aktionen='') : string
++{
++  $offen = empty($e['erledigt']);
++  $html = '<li class="bb-wartung-eintrag' . ($offen ? ' offen' : '') . '">';
++  $html .= '<div class="bb-wartung-kopf"><span class="bb-wartung-datum">' . escape_html(bb_wartung_wann($e)) . '</span>';
++  $meldung = bb_ist_meldung($e);
++  $status = $meldung ? ('Schadensmeldung · ' . ($offen ? 'offen' : 'behoben')) : ($offen ? 'offen' : 'erledigt');
++  $html .= '<span class="bb-wartung-status">' . $status . '</span></div>';
++  $html .= '<p class="bb-wartung-arbeit">' . nl2br(escape_html(trim((string) $e['arbeit'])), false) . '</p>';
++  $behebung = trim((string) ($e['behebung'] ?? ''));
++  if ($meldung && (!$offen || $behebung !== ''))
++  {
++    $wann = bb_datum_de($e['behoben_am'] ?? null);
++    $html .= '<p class="bb-wartung-behebung"><strong>' . ($offen ? 'Bisher gemacht' : 'Behoben' . (($wann !== '') ? ' am ' . $wann : '')) . ':</strong> ' .
++             (($behebung !== '') ? nl2br(escape_html($behebung), false) : '–') . '</p>';
++  }
++
++  $details = [];
++  if (trim((string) ($e['gemeldet_von'] ?? '')) !== '')
++  {
++    $details[] = ['Gemeldet', escape_html($e['gemeldet_von'])];
++  }
++  $fotos = bb_wartung_fotos($e);
++  if (!empty($fotos))
++  {
++    $details[] = ['Fotos', count($fotos) . ' in der Fotoablage<br><span class="bb-wartung-fotonamen">' .
++                           implode('<br>', array_map('MRBS\\escape_html', $fotos)) . '</span>'];
++  }
++  if (trim((string) $e['erledigt_von']) !== '')
++  {
++    $details[] = [bb_ist_meldung($e) ? 'Behoben von' : 'Von', escape_html($e['erledigt_von'])];
++  }
++  if (trim((string) $e['material']) !== '')
++  {
++    $details[] = ['Material', nl2br(escape_html(trim((string) $e['material'])), false)];
++  }
++  if (isset($e['stunden']) && (float) $e['stunden'] > 0)
++  {
++    $details[] = ['Stunden', bb_zahl_de($e['stunden'], 1)];
++  }
++  if (isset($e['kosten']) && (float) $e['kosten'] > 0)
++  {
++    $details[] = ['Kosten', bb_zahl_de($e['kosten'], 2) . ' €'];
++  }
++  if (!empty($details))
++  {
++    $html .= '<dl class="bb-wartung-details">';
++    foreach ($details as $d)
++    {
++      $html .= '<dt>' . $d[0] . '</dt><dd>' . $d[1] . '</dd>';
++    }
++    $html .= '</dl>';
++  }
++  $html .= $aktionen;
++  $html .= "</li>\n";
++
++  return $html;
++}
++
++
++// Aktionen unter einem Eintrag für Bootswartung und Admins: ggf. „Schaden
++// behoben“, Bearbeiten und Löschen. Hat eine Meldung Fotos, nennt die
++// Rückfrage vor dem Löschen die Dateien (die bleiben in der Fotoablage und
++// müssen dort von Hand gelöscht werden).
++function bb_wartung_aktionen_html(array $e, string $liste) : string
++{
++  $frage = 'Diesen Eintrag löschen?';
++  $fotos = bb_wartung_fotos($e);
++  if (!empty($fotos))
++  {
++    $frage .= "\n\nDie " . count($fotos) . ' Foto(s) bleiben in der Fotoablage und müssen dort von Hand gelöscht werden ' .
++              '(der Admin bekommt dazu eine Mail):' . "\n" . implode("\n", $fotos);
++  }
++  return '<form class="bb-wartung-aktionen" method="post" action="' . escape_html($liste) . '" ' .
++         'onsubmit="return confirm(' . escape_html(json_encode($frage, JSON_UNESCAPED_UNICODE)) . ');">' .
++         Form\Form::getTokenHTML() .
++         '<input type="hidden" name="action" value="loeschen">' .
++         '<input type="hidden" name="id" value="' . (int) $e['id'] . '">' .
++         ((bb_ist_meldung($e) && empty($e['erledigt'])) ?
++           '<a class="bb-knopf" href="' . escape_html($liste . '&eintrag=' . (int) $e['id'] . '&behoben=1') . '">Schaden behoben</a> ' : '') .
++         '<a href="' . escape_html($liste . '&eintrag=' . (int) $e['id']) . '">Bearbeiten</a> · ' .
++         '<button type="submit">Löschen</button></form>';
++}
++
++
++// Schadensmeldung per Mail an Bootswart und Boot-Paten; $geaendert = der
++// Melder hat seine Meldung nachträglich geändert
++function bb_wartung_meldung_mail(int $room_id, string $text, string $url, bool $geaendert=false) : void
++{
++  global $mail_settings;
++
++  require_once 'functions_mail.inc';
++
++  $sql = "SELECT R.room_name, R.room_admin_email, A.area_admin_email
++            FROM " . _tbl('room') . " R, " . _tbl('area') . " A
++           WHERE R.id=? AND A.id=R.area_id
++           LIMIT 1";
++  $row = db()->query($sql, [$room_id])->next_row_keyed();
++  if (empty($row))
++  {
++    return;
++  }
++
++  // Jede Adresse nur einmal, auch wenn sie in beiden Feldern steht
++  $to = [];
++  foreach (['area_admin_email', 'room_admin_email'] as $field)
++  {
++    if (isset($row[$field]) && (trim((string) $row[$field]) !== ''))
++    {
++      $parsed  = parse_addresses((string) $row[$field]);
++      $mailbox = address_merge([], (string) $row[$field]);
++      foreach ($parsed as $i => $p)
++      {
++        $key = mb_strtolower(trim($p['address']));
++        if (($key !== '') && !isset($to[$key]))
++        {
++          $to[$key] = $mailbox[$i];
++        }
++      }
++    }
++  }
++  if (empty($to))
++  {
++    mail_debug('Schadensmeldung: keine Empfängeradresse im Bereich/Boot eingetragen');
++    return;
++  }
++
++  $reporter = session()->getCurrentUser();
++  $name = ($reporter->display_name !== '') ? $reporter->display_name : $reporter->username;
++  $short = preg_replace('/\s+/', ' ', (mb_strlen($text) > 50) ? mb_substr($text, 0, 50) . '…' : $text);
++
++  $lines = [];
++  $lines[] = ($geaendert ? 'Geänderte Schadensmeldung zu ' : 'Schadensmeldung zu ') . $row['room_name'] . ':';
++  $lines[] = '';
++  $lines[] = $text;
++  $lines[] = '';
++  $lines[] = '----------------------------------------';
++  $lines[] = 'Gemeldet von:  ' . $name;
++  $lines[] = 'Gemeldet am:   ' . date('d.m.Y, H:i') . ' Uhr';
++  $lines[] = '';
++  $lines[] = 'Logbuch des Bootes: ' . $url;
++  require_once 'bb_unterlagen.inc';
++  $fotos = bb_fotos_mail_zeile($room_id);
++  if (isset($fotos))
++  {
++    $lines[] = $fotos;
++  }
++
++  $addresses = [
++    'from'     => $mail_settings['from'] ?? null,
++    'to'       => get_address_list(array_values($to)),
++    'cc'       => '',
++    'reply_to' => !empty($reporter->email) ? $reporter->mailbox() : ''
++  ];
++
++  MailQueue::add($addresses, ($geaendert ? 'Geänderte ' : '') . "Meldung zu {$row['room_name']}: $short",
++                 implode(MAIL_EOL, $lines) . MAIL_EOL, null, null, Language::MAIL_CHARSET);
++}
++
++
++// Mail an das Mitglied, das den Schaden gemeldet hat: ist behoben
++function bb_wartung_behoben_mail(array $e, string $url) : void
++{
++  global $mail_settings;
++
++  require_once 'functions_mail.inc';
++
++  $melder = isset($e['erstellt_von']) ? auth()->getUser((string) $e['erstellt_von']) : null;
++  if (!isset($melder) || empty($melder->email))
++  {
++    return;
++  }
++  // query1() liefert nur Zahlen, daher query()
++  $row = db()->query("SELECT room_name FROM " . _tbl('room') . " WHERE id=? LIMIT 1", [(int) $e['room_id']])->next_row_keyed();
++  if (empty($row))
++  {
++    return;
++  }
++  $boot = $row['room_name'];
++
++  $lines = [];
++  $lines[] = 'Der von dir gemeldete Schaden an ' . $boot . ' ist behoben.';
++  $lines[] = '';
++  $lines[] = 'Deine Meldung:';
++  $lines[] = trim((string) $e['arbeit']);
++  $lines[] = '';
++  if (trim((string) ($e['behebung'] ?? '')) !== '')
++  {
++    $lines[] = 'Was gemacht wurde:';
++    $lines[] = trim((string) $e['behebung']);
++    $lines[] = '';
++  }
++  $lines[] = '----------------------------------------';
++  if (trim((string) ($e['erledigt_von'] ?? '')) !== '')
++  {
++    $lines[] = 'Behoben von:   ' . $e['erledigt_von'];
++  }
++  $lines[] = 'Behoben am:    ' . bb_datum_de($e['behoben_am'] ?? null);
++  $lines[] = '';
++  $lines[] = 'Logbuch des Bootes: ' . $url;
++  $lines[] = '';
++  $lines[] = 'Danke fürs Melden!';
++
++  $user = session()->getCurrentUser();
++  $addresses = [
++    'from'     => $mail_settings['from'] ?? null,
++    'to'       => $melder->mailbox(),
++    'cc'       => '',
++    'reply_to' => (isset($user) && !empty($user->email)) ? $user->mailbox() : ''
++  ];
++
++  MailQueue::add($addresses, "Behoben: Meldung zu $boot",
++                 implode(MAIL_EOL, $lines) . MAIL_EOL, null, null, Language::MAIL_CHARSET);
++}
++
++
++// Gelöschte Schadensmeldung: Mail an den MRBS-Admin ($mail_settings['recipients'],
++// sonst Bootswart), damit die Fotos in der Fotoablage von Hand gelöscht werden.
++// Die Ablage ist nur zum Hochladen freigegeben, MRBS kann dort nicht löschen.
++function bb_wartung_geloescht_mail(array $e, string $url) : void
++{
++  global $mail_settings;
++
++  require_once 'functions_mail.inc';
++  require_once 'bb_unterlagen.inc';
++
++  $row = db()->query("SELECT R.room_name, A.area_admin_email
++                        FROM " . _tbl('room') . " R, " . _tbl('area') . " A
++                       WHERE R.id=? AND A.id=R.area_id
++                       LIMIT 1", [(int) $e['room_id']])->next_row_keyed();
++  if (empty($row))
++  {
++    return;
++  }
++  $to = trim((string) ($mail_settings['recipients'] ?? ''));
++  if (($to === '') || ($to === 'admin_email@your.org'))
++  {
++    $to = trim((string) ($row['area_admin_email'] ?? ''));
++  }
++  if ($to === '')
++  {
++    mail_debug('Gelöschte Schadensmeldung: keine Admin-Adresse');
++    return;
++  }
++
++  $user = session()->getCurrentUser();
++  $wer = (isset($user) && ($user->display_name !== '')) ? $user->display_name : ($user->username ?? '');
++  $fotos = bb_wartung_fotos($e);
++
++  $lines = [];
++  $lines[] = 'Eine Schadensmeldung zu ' . $row['room_name'] . ' wurde gelöscht.';
++  $lines[] = '';
++  $lines[] = 'Meldung vom ' . bb_wartung_wann($e) .
++             ((trim((string) ($e['gemeldet_von'] ?? '')) !== '') ? ' (' . $e['gemeldet_von'] . ')' : '') . ':';
++  $lines[] = trim((string) $e['arbeit']);
++  $lines[] = '';
++  if (!empty($fotos))
++  {
++    $lines[] = 'Bitte diese Fotos in der Fotoablage des Bootes in der Nextcloud löschen:';
++    foreach ($fotos as $f)
++    {
++      $lines[] = '  ' . $f;
++    }
++    $ordner = bb_fotos_ordner_url((int) $e['room_id']);
++    if (isset($ordner))
++    {
++      $lines[] = '';
++      $lines[] = 'Ordner: ' . $ordner;
++    }
++  }
++  else
++  {
++    $lines[] = 'Zu dieser Meldung sind keine Fotos vermerkt. Falls doch welche hochgeladen';
++    $lines[] = 'wurden, liegen sie in der Fotoablage des Bootes (Name beginnt mit Datum und Boot).';
++  }
++  $lines[] = '';
++  $lines[] = '----------------------------------------';
++  $lines[] = 'Gelöscht von:  ' . $wer;
++  $lines[] = 'Logbuch des Bootes: ' . $url;
++
++  $addresses = [
++    'from'     => $mail_settings['from'] ?? null,
++    'to'       => $to,
++    'cc'       => '',
++    'reply_to' => (isset($user) && !empty($user->email)) ? $user->mailbox() : ''
++  ];
++
++  MailQueue::add($addresses, 'Meldung gelöscht: ' . $row['room_name'] . (!empty($fotos) ? ' – ' . count($fotos) . ' Foto(s) löschen' : ''),
++                 implode(MAIL_EOL, $lines) . MAIL_EOL, null, null, Language::MAIL_CHARSET);
++}
+diff --git a/web/bb_wartung.php b/web/bb_wartung.php
+new file mode 100644
+index 0000000..f2671ae
+--- /dev/null
++++ b/web/bb_wartung.php
+@@ -0,0 +1,429 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Wartungs- und Reparatur-Logbuch eines Bootes
++//
++//   bb_wartung.php?boot=ID              alle Einträge
++//   bb_wartung.php?boot=ID&neu=1        Formular für einen neuen Eintrag
++//   bb_wartung.php?boot=ID&eintrag=N    Eintrag N bearbeiten
++//   bb_wartung.php?boot=ID&schaden=1    Schaden melden (alle Mitglieder)
++//   bb_wartung.php?boot=ID&eintrag=N&behoben=1
++//                                        gemeldeten Schaden N als behoben eintragen
++//   bb_wartung.php?boot=ID&aendern=N    eigene offene Meldung N ändern (Melder)
++//
++// POST action=speichern / loeschen (nur Bootswartung und Admins) bzw.
++// action=melden (alle), danach zurück zur Liste. Lesen dürfen alle
++// angemeldeten Mitglieder.
++// Technik und Rechte: bb_wartung.inc, Tabelle aus sql/wartung.sql.
++// =============================================================================
++
++require "defaultincludes.inc";
++require_once "bb_wartung.inc";
++
++checkAuthorised('search.php');
++
++$boot    = get_form_var('boot', 'int');
++$eintrag = get_form_var('eintrag', 'int');
++$neu     = (get_form_var('neu', 'string') === '1');
++$schaden = (get_form_var('schaden', 'string') === '1');
++$behoben = (get_form_var('behoben', 'string') === '1');
++$aendern = get_form_var('aendern', 'int');
++$darf    = bb_ist_bootswartung();
++$aktiv   = bb_wartung_aktiv();
++$tabelle = _tbl('bb_wartung');
++
++$b = null;
++if (isset($boot))
++{
++  $res = db()->query("SELECT id, room_name FROM " . _tbl('room') . " WHERE id=? AND disabled=0 LIMIT 1", [$boot]);
++  $b = $res->next_row_keyed() ?: null;
++}
++
++$liste = multisite('bb_wartung.php?boot=' . (int) $boot);
++
++if ($server['REQUEST_METHOD'] === 'POST')
++{
++  Form::checkToken();
++  $mrbs_user = session()->getCurrentUser();
++  $action = get_form_var('action', 'string');
++
++  // Schaden melden: jedes Mitglied
++  if ($action === 'melden' && $aktiv && isset($b))
++  {
++    $text = trim((string) get_form_var('text', 'string'));
++    $id = get_form_var('id', 'int');
++    if (isset($id))
++    {
++      // Eigene offene Meldung ändern; bei neuem Text erneut Mail
++      $e = db()->query("SELECT * FROM $tabelle WHERE id=? AND room_id=? LIMIT 1", [$id, $b['id']])->next_row_keyed() ?: null;
++      if (!isset($e) || !bb_ist_eigene_meldung($e))
++      {
++        http_response_code(403);
++        exit('Keine Berechtigung.');
++      }
++      $neue_fotos = bb_wartung_fotos_formular();
++      if (!empty($neue_fotos) && bb_wartung_fotos_aktiv())
++      {
++        $alle = array_values(array_unique(array_merge(bb_wartung_fotos($e), $neue_fotos)));
++        db()->command("UPDATE $tabelle SET fotos=? WHERE id=? AND room_id=?", [implode("\n", $alle), $id, $b['id']]);
++      }
++      if (($text !== '') && (($text !== trim((string) $e['arbeit'])) || !empty($neue_fotos)))
++      {
++        db()->command("UPDATE $tabelle SET arbeit=?, geaendert_von=?, geaendert_am=? WHERE id=? AND room_id=?",
++                      [$text, $mrbs_user->username, time(), $id, $b['id']]);
++        bb_wartung_meldung_mail((int) $b['id'], $text, url_base() . $liste, true);
++        location_header($liste . '&gemeldet=2');
++      }
++      location_header($liste);
++    }
++    elseif ($text !== '')
++    {
++      $name = ($mrbs_user->display_name !== '') ? $mrbs_user->display_name : $mrbs_user->username;
++      db()->command("INSERT INTO $tabelle (room_id, datum, erledigt, art, arbeit, gemeldet_von, erstellt_von, erstellt_am)
++                     VALUES (?, ?, 0, 'meldung', ?, ?, ?, ?)",
++                    [$b['id'], date('Y-m-d'), $text, mb_substr($name, 0, 100), $mrbs_user->username, time()]);
++      // Gleich hier holen: Nach einer weiteren Abfrage (z. B. in bb_wartung_fotos_aktiv())
++      // liefert MySQL für lastInsertId() nur noch 0.
++      $neu_id = db()->insert_id($tabelle, 'id');
++      $fotos = bb_wartung_fotos_formular();
++      if (!empty($fotos) && ($neu_id > 0) && bb_wartung_fotos_aktiv())
++      {
++        db()->command("UPDATE $tabelle SET fotos=? WHERE id=?", [implode("\n", $fotos), $neu_id]);
++      }
++      bb_wartung_meldung_mail((int) $b['id'], $text, url_base() . $liste);
++    }
++    location_header($liste . '&gemeldet=1');
++  }
++
++  if (!$darf || !$aktiv || !isset($b))
++  {
++    http_response_code(403);
++    exit('Keine Berechtigung.');
++  }
++
++  $id = get_form_var('id', 'int');
++
++  if ($action === 'loeschen' && isset($id))
++  {
++    // Fotos bleiben in der Fotoablage: danach sagen, welche von Hand weg müssen
++    $e = db()->query("SELECT * FROM $tabelle WHERE id=? AND room_id=? LIMIT 1", [$id, $b['id']])->next_row_keyed() ?: [];
++    db()->command("DELETE FROM $tabelle WHERE id=? AND room_id=?", [$id, $b['id']]);
++    if (!empty($e) && bb_ist_meldung($e))
++    {
++      bb_wartung_geloescht_mail($e, url_base() . $liste);
++    }
++    $fotos = bb_wartung_fotos($e);
++    if (!empty($fotos))
++    {
++      location_header($liste . '&fotos_uebrig=' . rawurlencode(implode("\n", $fotos)));
++    }
++  }
++  elseif ($action === 'speichern')
++  {
++    $datum = (string) get_form_var('datum', 'string');
++    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum))
++    {
++      $datum = date('Y-m-d');
++    }
++    $zahl = function (string $name) : ?float {
++      $v = str_replace(',', '.', trim((string) get_form_var($name, 'string')));
++      return is_numeric($v) && (float) $v >= 0 ? round((float) $v, 2) : null;
++    };
++    $werte = [
++      $datum,
++      mb_substr(trim((string) get_form_var('erledigt_von', 'string')), 0, 100),
++      trim((string) get_form_var('arbeit', 'string')),
++      trim((string) get_form_var('material', 'string')),
++      $zahl('stunden'),
++      $zahl('kosten'),
++      (get_form_var('erledigt', 'string') === '0') ? 0 : 1,
++      $mrbs_user->username,
++      time()
++    ];
++    if ($werte[2] !== '')
++    {
++      if (isset($id))
++      {
++        $vorher = db()->query("SELECT * FROM $tabelle WHERE id=? AND room_id=? LIMIT 1", [$id, $b['id']])->next_row_keyed() ?: null;
++        db()->command("UPDATE $tabelle SET datum=?, erledigt_von=?, arbeit=?, material=?, stunden=?, kosten=?, erledigt=?,
++                              geaendert_von=?, geaendert_am=?
++                        WHERE id=? AND room_id=?",
++                      array_merge($werte, [$id, $b['id']]));
++
++        // Gemeldeter Schaden: was wurde gemacht, wann behoben
++        if (isset($vorher) && bb_ist_meldung($vorher) && bb_wartung_behebung_aktiv())
++        {
++          $behebung = trim((string) get_form_var('behebung', 'string'));
++          $behoben_am = (string) get_form_var('behoben_am', 'string');
++          if ($werte[6] === 0)
++          {
++            $behoben_am = null;
++          }
++          elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $behoben_am))
++          {
++            $behoben_am = date('Y-m-d');
++          }
++          db()->command("UPDATE $tabelle SET behebung=?, behoben_am=? WHERE id=? AND room_id=?",
++                        [($behebung === '') ? null : $behebung, $behoben_am, $id, $b['id']]);
++
++          // Gerade behoben: wer gemeldet hat, bekommt Bescheid
++          if (empty($vorher['erledigt']) && ($werte[6] === 1))
++          {
++            $nachher = db()->query("SELECT * FROM $tabelle WHERE id=? LIMIT 1", [$id])->next_row_keyed();
++            bb_wartung_behoben_mail($nachher, url_base() . $liste);
++          }
++        }
++      }
++      else
++      {
++        db()->command("INSERT INTO $tabelle (datum, erledigt_von, arbeit, material, stunden, kosten, erledigt,
++                                             erstellt_von, erstellt_am, room_id)
++                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
++                      array_merge($werte, [$b['id']]));
++      }
++    }
++  }
++
++  location_header($liste);
++}
++
++
++// Formular "Schaden melden" für alle Mitglieder; Fotos lädt theme.js über
++// den Link mit data-bb-upload direkt in die Fotoablage (bb_fotos.php).
++// Mit $e: die eigene offene Meldung ändern.
++function bb_schaden_formular(int $room_id, string $abbrechen, ?array $e=null) : string
++{
++  require_once 'bb_unterlagen.inc';
++
++  $html = '<form class="bb-wartung-formular" method="post" action="' . escape_html(multisite('bb_wartung.php?boot=' . $room_id)) . '">';
++  $html .= Form::getTokenHTML();
++  $html .= '<input type="hidden" name="action" value="melden">';
++  if (isset($e))
++  {
++    $html .= '<input type="hidden" name="id" value="' . (int) $e['id'] . '">';
++  }
++  $html .= '<h3>' . (isset($e) ? 'Meldung ändern' : 'Schaden melden') . '</h3>';
++  $html .= '<label>Was ist kaputt? <textarea name="text" rows="4" required placeholder="z. B. Großschot am Block ausgefranst">' .
++           (isset($e) ? escape_html(trim((string) $e['arbeit'])) : '') . '</textarea></label>';
++  $fotos = bb_fotos_url($room_id);
++  if (isset($fotos))
++  {
++    $attr = bb_fotos_attribute($fotos, $room_id);
++    $html .= '<div class="bb-schaden-fotos"><a';
++    foreach ($attr as $k => $v)
++    {
++      $html .= ' ' . $k . '="' . escape_html((string) $v) . '"';
++    }
++    $html .= '>Fotos hinzufügen</a></div>';
++  }
++  $html .= '<p class="bb-wartung-hinweis">' . (isset($e) ?
++           'Die geänderte Meldung geht noch einmal an Bootswart und Boot-Paten.' :
++           'Die Meldung geht an Bootswart und Boot-Paten und steht danach als „offen“ im Logbuch des Bootes.') . '</p>';
++  $html .= '<p class="bb-boot-knoepfe"><button type="submit" class="bb-knopf">' . (isset($e) ? 'Änderung abschicken' : 'Meldung abschicken') . '</button> ' .
++           '<a class="bb-knopf zweitrangig" href="' . escape_html($abbrechen) . '">Abbrechen</a></p>';
++  $html .= "</form>\n";
++
++  return $html;
++}
++
++
++// Formular für neuen oder vorhandenen Eintrag; $behoben = gemeldeten
++// Schaden als behoben eintragen (Status erledigt, Behoben am heute)
++function bb_wartung_formular(array $e, string $abbrechen, bool $behoben=false) : string
++{
++  $mrbs_user = session()->getCurrentUser();
++  $id = $e['id'] ?? null;
++  $wert = function (string $f, string $vorgabe='') use ($e) : string {
++    return escape_html(isset($e[$f]) ? (string) $e[$f] : $vorgabe);
++  };
++  $zahl = function (string $f) use ($e) : string {
++    return (isset($e[$f]) && (float) $e[$f] > 0) ? escape_html(rtrim(rtrim((string) $e[$f], '0'), '.')) : '';
++  };
++  $meldung = isset($id) && bb_ist_meldung($e);
++  $behoben = $behoben && $meldung;
++  $offen = isset($id) && empty($e['erledigt']) && !$behoben;
++  $wer = (string) (($mrbs_user->display_name ?? '') !== '' ? $mrbs_user->display_name : $mrbs_user->username);
++
++  $html = '<form class="bb-wartung-formular" method="post" action="' . escape_html(multisite('bb_wartung.php?boot=' . (int) $e['room_id'])) . '">';
++  $html .= Form::getTokenHTML();
++  $html .= '<input type="hidden" name="action" value="speichern">';
++  if (isset($id))
++  {
++    $html .= '<input type="hidden" name="id" value="' . (int) $id . '">';
++  }
++  $html .= '<h3>' . ($behoben ? 'Schaden behoben' : ($meldung ? 'Schadensmeldung bearbeiten' : (isset($id) ? 'Eintrag bearbeiten' : 'Neuer Eintrag'))) . '</h3>';
++  $html .= '<div class="bb-wartung-zeile">';
++  $html .= '<label>' . ($meldung ? 'Gemeldet am' : 'Datum') . ' <input type="date" name="datum" required value="' . $wert('datum', date('Y-m-d')) . '"></label>';
++  $html .= '<label>Status <select name="erledigt"><option value="1">' . ($meldung ? 'behoben' : 'erledigt') . '</option><option value="0"' . ($offen ? ' selected' : '') . '>offen</option></select></label>';
++  $html .= '</div>';
++  if ($meldung)
++  {
++    if (trim((string) ($e['gemeldet_von'] ?? '')) !== '')
++    {
++      $html .= '<p class="bb-wartung-hinweis">Gemeldet von ' . escape_html($e['gemeldet_von']) . '.' .
++               ($behoben ? ' Beim Speichern bekommt das Mitglied eine Mail, dass der Schaden behoben ist.' : '') . '</p>';
++    }
++    $html .= '<label>Was ist kaputt? <textarea name="arbeit" rows="3" required>' . $wert('arbeit') . '</textarea></label>';
++    if (bb_wartung_behebung_aktiv())
++    {
++      $html .= '<label>Was wurde gemacht? <textarea name="behebung" rows="3"' . ($behoben ? ' required autofocus' : '') . '>' . $wert('behebung') . '</textarea></label>';
++      $html .= '<div class="bb-wartung-zeile">';
++      $html .= '<label>Behoben am <input type="date" name="behoben_am" value="' . $wert('behoben_am', $behoben ? date('Y-m-d') : '') . '"></label>';
++      $html .= '</div>';
++    }
++    $html .= '<label>Wer hat es behoben? <input type="text" name="erledigt_von" maxlength="100" value="' .
++             escape_html((trim((string) ($e['erledigt_von'] ?? '')) !== '') ? $e['erledigt_von'] : ($behoben ? $wer : '')) . '"></label>';
++  }
++  else
++  {
++    $html .= '<label>Was wurde gemacht? <textarea name="arbeit" rows="3" required>' . $wert('arbeit') . '</textarea></label>';
++    $html .= '<label>Wer? <input type="text" name="erledigt_von" maxlength="100" value="' .
++             $wert('erledigt_von', isset($id) ? '' : $wer) . '"></label>';
++  }
++  $html .= '<label>Material <textarea name="material" rows="2">' . $wert('material') . '</textarea></label>';
++  $html .= '<div class="bb-wartung-zeile">';
++  $html .= '<label>Stunden <input type="text" inputmode="decimal" name="stunden" value="' . $zahl('stunden') . '"></label>';
++  $html .= '<label>Kosten (€) <input type="text" inputmode="decimal" name="kosten" value="' . $zahl('kosten') . '"></label>';
++  $html .= '</div>';
++  $html .= '<p class="bb-boot-knoepfe"><button type="submit" class="bb-knopf">Speichern</button> ' .
++           '<a class="bb-knopf zweitrangig" href="' . escape_html($abbrechen) . '">Abbrechen</a></p>';
++  $html .= "</form>\n";
++
++  return $html;
++}
++
++
++$context = array(
++    'view'      => $view,
++    'view_all'  => $view_all,
++    'year'      => $year,
++    'month'     => $month,
++    'day'       => $day,
++    'area'      => $area,
++    'room'      => $room ?? null
++  );
++
++print_header($context);
++
++echo "<div id=\"bb-boote\" class=\"bb-wartung-seite\">\n";
++
++if (!isset($b))
++{
++  echo "<p class=\"bb-zurueck\"><a href=\"" . escape_html(multisite('bb_boote.php')) . "\">‹ Alle Boote</a></p>\n";
++  echo "<p class=\"bb-leer\">Dieses Boot gibt es nicht (mehr).</p>\n";
++}
++else
++{
++  echo "<p class=\"bb-zurueck\"><a href=\"" . escape_html(multisite('bb_boote.php?boot=' . (int) $b['id'])) . "\">‹ " . escape_html($b['room_name']) . "</a></p>\n";
++  echo "<h2>Wartung &amp; Reparaturen</h2>\n";
++  echo '<p class="bb-intro">' . escape_html($b['room_name']) . " – wer hat wann was gemacht, mit welchem Material.</p>\n";
++
++  if (!$aktiv)
++  {
++    echo "<p class=\"bb-leer\">Das Logbuch ist auf diesem Server noch nicht eingerichtet (sql/wartung.sql).</p>\n";
++  }
++  else
++  {
++    $eintraege = bb_wartung_eintraege((int) $b['id']);
++
++    if (get_form_var('gemeldet', 'string') === '1')
++    {
++      echo "<p class=\"bb-wartung-ok\">Danke! Deine Meldung ist eingetragen und an Bootswart und Boot-Paten geschickt.</p>\n";
++    }
++    elseif (get_form_var('gemeldet', 'string') === '2')
++    {
++      echo "<p class=\"bb-wartung-ok\">Deine Änderung ist eingetragen und an Bootswart und Boot-Paten geschickt.</p>\n";
++    }
++
++    // Nach dem Löschen einer Meldung mit Fotos: die Dateien nennen
++    $uebrig = array_filter(array_map('trim', explode("\n", (string) get_form_var('fotos_uebrig', 'string'))));
++    if ($darf && !empty($uebrig))
++    {
++      echo '<div class="bb-wartung-ok bb-wartung-fotos-uebrig"><p><strong>Eintrag gelöscht.</strong> Diese ' . count($uebrig) .
++           ' Foto(s) liegen noch in der Fotoablage von ' . escape_html($b['room_name']) . ' und müssen dort in der Nextcloud von Hand gelöscht werden:</p><ul>';
++      foreach (array_slice($uebrig, 0, 30) as $f)
++      {
++        echo '<li>' . escape_html($f) . '</li>';
++      }
++      echo '</ul>';
++      require_once 'bb_unterlagen.inc';
++      $ordner = bb_fotos_ordner_url((int) $b['id']);
++      if (isset($ordner))
++      {
++        echo '<p><a href="' . escape_html($ordner) . '" target="_blank" rel="noopener">Fotoordner in der Nextcloud öffnen</a></p>';
++      }
++      echo "</div>\n";
++    }
++
++    $eigene = null;
++    foreach ($eintraege as $x)
++    {
++      if (isset($aendern) && ((int) $x['id'] === $aendern) && bb_ist_eigene_meldung($x))
++      {
++        $eigene = $x;
++      }
++    }
++
++    if (isset($eigene))
++    {
++      echo bb_schaden_formular((int) $b['id'], $liste, $eigene);
++    }
++    elseif ($schaden)
++    {
++      echo bb_schaden_formular((int) $b['id'], multisite('bb_boote.php?boot=' . (int) $b['id']));
++    }
++    elseif ($darf && ($neu || isset($eintrag)))
++    {
++      $e = ['room_id' => $b['id']];
++      foreach ($eintraege as $x)
++      {
++        if (isset($eintrag) && (int) $x['id'] === $eintrag)
++        {
++          $e = $x;
++        }
++      }
++      echo bb_wartung_formular($e, $liste, $behoben);
++    }
++    else
++    {
++      echo '<p class="bb-boot-knoepfe">';
++      if ($darf)
++      {
++        echo '<a class="bb-knopf" href="' . escape_html($liste . '&neu=1') . '">Neuer Eintrag</a> ';
++      }
++      echo '<a class="bb-knopf zweitrangig" href="' . escape_html($liste . '&schaden=1') . '">Schaden melden</a> ';
++      echo '<a class="bb-knopf zweitrangig" href="' . escape_html(multisite('bb_wartung_bericht.php?boot=' . (int) $b['id'])) . "\">Bericht</a></p>\n";
++    }
++
++    if (empty($eintraege))
++    {
++      echo "<p class=\"bb-leer\">Noch keine Einträge.</p>\n";
++    }
++    else
++    {
++      echo "<ul class=\"bb-wartung\">\n";
++      foreach ($eintraege as $e)
++      {
++        $aktionen = '';
++        if ($darf)
++        {
++          $aktionen = bb_wartung_aktionen_html($e, $liste);
++        }
++        elseif (bb_ist_eigene_meldung($e))
++        {
++          $aktionen = '<p class="bb-wartung-aktionen"><a href="' . escape_html($liste . '&aendern=' . (int) $e['id']) . '">Meldung ändern</a></p>';
++        }
++        echo bb_wartung_html($e, $aktionen);
++      }
++      echo "</ul>\n";
++    }
++  }
++}
++
++echo "</div>\n";
++
++print_footer();
+diff --git a/web/bb_wartung_bericht.php b/web/bb_wartung_bericht.php
+new file mode 100644
+index 0000000..6b07ac2
+--- /dev/null
++++ b/web/bb_wartung_bericht.php
+@@ -0,0 +1,269 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Wartungsbericht über alle Boote
++//
++//   bb_wartung_bericht.php?von=JJJJ-MM-TT&bis=…&boot=ID&art=arbeit|meldung
++//                          &status=offen|erledigt&q=Text[&format=csv]
++//
++// Liste aller Einträge aus dem Wartungs-Logbuch (mrbs_bb_wartung) mit
++// Summen für Stunden und Kosten, je Boot und gesamt, als Tabelle oder
++// CSV-Datei (Excel, Semikolon). Lesen dürfen wie beim Logbuch alle
++// angemeldeten Mitglieder. Verlinkt von der Berichtsseite (theme.js) und
++// vom Logbuch (bb_wartung.php).
++// =============================================================================
++
++require "defaultincludes.inc";
++require_once "bb_wartung.inc";
++
++checkAuthorised('search.php');
++
++$heute = date('Y-m-d');
++$datum = function (string $name, string $vorgabe) : string {
++  $v = (string) get_form_var($name, 'string');
++  return preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) ? $v : $vorgabe;
++};
++$von    = $datum('von', date('Y') . '-01-01');
++$bis    = $datum('bis', $heute);
++$boot   = get_form_var('boot', 'int');
++$art    = (string) get_form_var('art', 'string');
++$status = (string) get_form_var('status', 'string');
++$q      = trim((string) get_form_var('q', 'string'));
++$csv    = (get_form_var('format', 'string') === 'csv');
++$aktiv  = bb_wartung_aktiv();
++$mit_behebung = bb_wartung_behebung_aktiv();
++
++// Boote für die Auswahl
++$boote = [];
++$res = db()->query("SELECT R.id, R.room_name
++                      FROM " . _tbl('room') . " R, " . _tbl('area') . " A
++                     WHERE A.id=R.area_id AND R.disabled=0 AND A.disabled=0
++                  ORDER BY R.room_name");
++while (false !== ($row = $res->next_row_keyed()))
++{
++  $boote[(int) $row['id']] = $row['room_name'];
++}
++
++// Einträge nach Filter
++$eintraege = [];
++if ($aktiv)
++{
++  $sql = "SELECT W.*, R.room_name
++            FROM " . _tbl('bb_wartung') . " W, " . _tbl('room') . " R
++           WHERE R.id=W.room_id AND W.datum>=? AND W.datum<=?";
++  $params = [$von, $bis];
++  if (isset($boot) && isset($boote[$boot]))
++  {
++    $sql .= " AND W.room_id=?";
++    $params[] = $boot;
++  }
++  if ($art === 'meldung')
++  {
++    $sql .= " AND W.art='meldung'";
++  }
++  elseif ($art === 'arbeit')
++  {
++    $sql .= " AND W.art<>'meldung'";
++  }
++  if ($status === 'offen')
++  {
++    $sql .= " AND W.erledigt=0";
++  }
++  elseif ($status === 'erledigt')
++  {
++    $sql .= " AND W.erledigt<>0";
++  }
++  if ($q !== '')
++  {
++    $felder = ['W.arbeit', 'W.material', 'W.erledigt_von', 'W.gemeldet_von'];
++    if ($mit_behebung)
++    {
++      $felder[] = 'W.behebung';
++    }
++    $sql .= " AND (" . implode(' OR ', array_map(function ($f) {
++              return "$f LIKE ?";
++            }, $felder)) . ")";
++    $muster = '%' . addcslashes($q, '%_\\') . '%';
++    foreach ($felder as $f)
++    {
++      $params[] = $muster;
++    }
++  }
++  $sql .= " ORDER BY W.datum DESC, R.room_name, W.id DESC";
++  $res = db()->query($sql, $params);
++  while (false !== ($row = $res->next_row_keyed()))
++  {
++    $eintraege[] = $row;
++  }
++}
++
++$status_text = function (array $e) : string {
++  $offen = empty($e['erledigt']);
++  return bb_ist_meldung($e) ? ($offen ? 'offen' : 'behoben') : ($offen ? 'offen' : 'erledigt');
++};
++
++// Summen je Boot und gesamt
++$summen = [];
++$gesamt = ['n' => 0, 'stunden' => 0.0, 'kosten' => 0.0, 'offen' => 0];
++foreach ($eintraege as $e)
++{
++  $name = $e['room_name'];
++  $summen[$name] = $summen[$name] ?? ['n' => 0, 'stunden' => 0.0, 'kosten' => 0.0, 'offen' => 0];
++  foreach ([&$summen[$name], &$gesamt] as &$s)
++  {
++    $s['n']++;
++    $s['stunden'] += (float) ($e['stunden'] ?? 0);
++    $s['kosten']  += (float) ($e['kosten'] ?? 0);
++    $s['offen']   += empty($e['erledigt']) ? 1 : 0;
++  }
++  unset($s);
++}
++ksort($summen, SORT_NATURAL | SORT_FLAG_CASE);
++
++
++if ($csv)
++{
++  $datei = 'wartung_' . $von . '_' . $bis . '.csv';
++  header('Content-Type: text/csv; charset=utf-8');
++  header('Content-Disposition: attachment; filename="' . $datei . '"');
++  $out = fopen('php://output', 'w');
++  fwrite($out, "\xEF\xBB\xBF");   // BOM, damit Excel die Umlaute erkennt
++  $zahl = function ($v, int $stellen) : string {
++    return (isset($v) && (float) $v > 0) ? number_format((float) $v, $stellen, ',', '') : '';
++  };
++  fputcsv($out, ['Datum', 'Boot', 'Art', 'Status', 'Was / Schaden', 'Was wurde gemacht', 'Behoben am',
++                 'Gemeldet von', 'Wer', 'Material', 'Stunden', 'Kosten'], ';', '"', '');
++  foreach ($eintraege as $e)
++  {
++    $meldung = bb_ist_meldung($e);
++    fputcsv($out, [
++      bb_wartung_wann($e),
++      $e['room_name'],
++      $meldung ? 'Schadensmeldung' : 'Arbeit',
++      $status_text($e),
++      trim((string) $e['arbeit']),
++      trim((string) ($e['behebung'] ?? '')),
++      bb_datum_de($e['behoben_am'] ?? null),
++      (string) ($e['gemeldet_von'] ?? ''),
++      (string) ($e['erledigt_von'] ?? ''),
++      trim((string) ($e['material'] ?? '')),
++      $zahl($e['stunden'] ?? null, 2),
++      $zahl($e['kosten'] ?? null, 2)
++    ], ';', '"', '');
++  }
++  fclose($out);
++  exit;
++}
++
++
++$context = array(
++    'view'      => $view,
++    'view_all'  => $view_all,
++    'year'      => $year,
++    'month'     => $month,
++    'day'       => $day,
++    'area'      => $area,
++    'room'      => $room ?? null
++  );
++
++print_header($context);
++
++echo "<div id=\"bb-boote\" class=\"bb-wartung-seite bb-wartung-bericht\">\n";
++echo "<p class=\"bb-zurueck\"><a href=\"" . escape_html(multisite('bb_boote.php')) . "\">‹ Alle Boote</a></p>\n";
++echo "<h2>Wartungsbericht</h2>\n";
++echo "<p class=\"bb-intro\">Arbeiten und Schadensmeldungen aller Boote aus den Logbüchern, mit Summen für Stunden und Kosten.</p>\n";
++
++if (!$aktiv)
++{
++  echo "<p class=\"bb-leer\">Das Logbuch ist auf diesem Server noch nicht eingerichtet (sql/wartung.sql).</p>\n";
++}
++else
++{
++  $auswahl = function (string $name, array $optionen, string $wert) : string {
++    $html = '<select name="' . $name . '">';
++    foreach ($optionen as $k => $text)
++    {
++      $html .= '<option value="' . escape_html((string) $k) . '"' . (((string) $k === $wert) ? ' selected' : '') . '>' . escape_html($text) . '</option>';
++    }
++    return $html . '</select>';
++  };
++
++  echo '<form class="bb-wartung-formular bb-bericht-filter" method="get" action="' . escape_html(multisite('bb_wartung_bericht.php')) . '">';
++  echo '<div class="bb-wartung-zeile">';
++  echo '<label>Von <input type="date" name="von" value="' . escape_html($von) . '"></label>';
++  echo '<label>Bis <input type="date" name="bis" value="' . escape_html($bis) . '"></label>';
++  echo '</div>';
++  echo '<div class="bb-wartung-zeile">';
++  echo '<label>Boot ' . $auswahl('boot', ['' => 'Alle Boote'] + $boote, isset($boot) ? (string) $boot : '') . '</label>';
++  echo '<label>Art ' . $auswahl('art', ['' => 'Alle', 'arbeit' => 'Arbeiten', 'meldung' => 'Schadensmeldungen'], $art) . '</label>';
++  echo '<label>Status ' . $auswahl('status', ['' => 'Alle', 'offen' => 'offen', 'erledigt' => 'erledigt / behoben'], $status) . '</label>';
++  echo '</div>';
++  echo '<label>Suche <input type="search" name="q" value="' . escape_html($q) . '" placeholder="z. B. Antifouling, Pinne, Klaus"></label>';
++  echo '<p class="bb-boot-knoepfe"><button type="submit" class="bb-knopf">Bericht erstellen</button> ' .
++       '<button type="submit" name="format" value="csv" class="bb-knopf zweitrangig">Als CSV (Excel)</button></p>';
++  echo "</form>\n";
++
++  $stunden = function (float $v) : string { return ($v > 0) ? bb_zahl_de($v, 1) : '–'; };
++  $kosten  = function (float $v) : string { return ($v > 0) ? bb_zahl_de($v, 2) . ' €' : '–'; };
++
++  if (empty($eintraege))
++  {
++    echo "<p class=\"bb-leer\">Keine Einträge für diese Auswahl.</p>\n";
++  }
++  else
++  {
++    // Summen je Boot
++    echo "<h3>Summen</h3>\n";
++    echo '<div class="bb-bericht-scroll"><table class="bb-bericht-tabelle">';
++    echo '<thead><tr><th>Boot</th><th class="zahl">Einträge</th><th class="zahl">davon offen</th><th class="zahl">Stunden</th><th class="zahl">Kosten</th></tr></thead><tbody>';
++    foreach ($summen as $name => $s)
++    {
++      echo '<tr><td>' . escape_html($name) . '</td><td class="zahl">' . $s['n'] . '</td><td class="zahl">' . $s['offen'] .
++           '</td><td class="zahl">' . $stunden($s['stunden']) . '</td><td class="zahl">' . $kosten($s['kosten']) . '</td></tr>';
++    }
++    echo '</tbody><tfoot><tr><th>Gesamt</th><th class="zahl">' . $gesamt['n'] . '</th><th class="zahl">' . $gesamt['offen'] .
++         '</th><th class="zahl">' . $stunden($gesamt['stunden']) . '</th><th class="zahl">' . $kosten($gesamt['kosten']) . "</th></tr></tfoot></table></div>\n";
++
++    // Einzelne Einträge
++    echo "<h3>Einträge</h3>\n";
++    echo '<div class="bb-bericht-scroll"><table class="bb-bericht-tabelle">';
++    echo '<thead><tr><th>Datum</th><th>Boot</th><th>Art</th><th>Was</th><th>Wer</th><th>Material</th><th class="zahl">Std.</th><th class="zahl">Kosten</th></tr></thead><tbody>';
++    foreach ($eintraege as $e)
++    {
++      $meldung = bb_ist_meldung($e);
++      $was = nl2br(escape_html(trim((string) $e['arbeit'])), false);
++      if (trim((string) ($e['behebung'] ?? '')) !== '')
++      {
++        $wann = bb_datum_de($e['behoben_am'] ?? null);
++        $was .= '<br><span class="bb-bericht-behebung">Behoben' . (($wann !== '') ? ' am ' . $wann : '') . ': ' .
++                nl2br(escape_html(trim((string) $e['behebung'])), false) . '</span>';
++      }
++      $wer = [];
++      if (trim((string) ($e['gemeldet_von'] ?? '')) !== '')
++      {
++        $wer[] = 'gemeldet: ' . escape_html($e['gemeldet_von']);
++      }
++      if (trim((string) ($e['erledigt_von'] ?? '')) !== '')
++      {
++        $wer[] = ($meldung ? 'behoben: ' : '') . escape_html($e['erledigt_von']);
++      }
++      $logbuch = multisite('bb_wartung.php?boot=' . (int) $e['room_id']);
++      echo '<tr' . (empty($e['erledigt']) ? ' class="offen"' : '') . '>' .
++           '<td>' . escape_html(bb_wartung_wann($e)) . '</td>' .
++           '<td><a href="' . escape_html($logbuch) . '">' . escape_html($e['room_name']) . '</a></td>' .
++           '<td>' . ($meldung ? 'Meldung' : 'Arbeit') . ' · ' . $status_text($e) . '</td>' .
++           '<td>' . $was . '</td>' .
++           '<td>' . implode('<br>', $wer) . '</td>' .
++           '<td>' . nl2br(escape_html(trim((string) ($e['material'] ?? ''))), false) . '</td>' .
++           '<td class="zahl">' . $stunden((float) ($e['stunden'] ?? 0)) . '</td>' .
++           '<td class="zahl">' . $kosten((float) ($e['kosten'] ?? 0)) . '</td></tr>';
++    }
++    echo "</tbody></table></div>\n";
++  }
++}
++
++echo "</div>\n";
++
++print_footer();
