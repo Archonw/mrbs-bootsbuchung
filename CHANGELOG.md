@@ -6,6 +6,18 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-10-31 – Ansprechpartner der Hilfeseite in der Verwaltung
+
+- **Ansprechpartner:** Auf der MRBS-Hilfeseite stand „Bitte kontaktieren Sie
+  Your Administrator …“. Name und E-Mail dafür stellen Admins jetzt unter
+  **Verwaltung → Ansprechpartner (Hilfeseite)** ein (ganz unten), z. B.
+  „unseren Administrator“. Der Name wird zum Mail-Link.
+- Neuinstallationen tragen Name und Adresse des ersten Admins als Vorgabe ein.
+
+Für bestehende Installationen ist nichts von Hand zu tun (gespeichert in der
+vorhandenen Tabelle `mrbs_variables`). Einfach `update.sh` und danach unter
+Verwaltung eintragen.
+
 ## 2026-10-31 – Hilfe zur aktuellen Seite (Deutsch, Englisch, Spanisch)
 
 - **Hilfe:** Der Menüpunkt „Hilfe“ öffnet ein Fenster, das die gerade offene

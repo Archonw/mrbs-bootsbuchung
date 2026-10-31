@@ -301,6 +301,8 @@ return [
                  . '<li><strong>Add Room</strong> (a boat) or <strong>Edit</strong> next to a boat: name, capacity, boat data, information, links to documents and photo folder, email of the person looking after the boat.</li>'
                  . '<li><strong>Disable</strong> a boat instead of deleting it: it disappears from the plan, old bookings remain.</li>'
                  . '</ul>'],
+        ['fuer' => 'admin', 'titel' => 'Contact person (help page)',
+         'html' => '<p>At the very bottom, under <strong>Ansprechpartner (Hilfeseite)</strong>, set who the help page names for questions: <strong>Name</strong> (inserted into the sentence “Please contact … for any questions”) and <strong>E-Mail</strong> (the name becomes a mail link). An empty field uses the value from config.inc.php.</p>'],
       ],
     ],
 

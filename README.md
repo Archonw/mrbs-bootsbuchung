@@ -302,6 +302,12 @@ die englische und spanische Hilfe nennt deren Knöpfe deshalb auf Deutsch mit
 | `theme/verein/hilfe/fr.php` usw. | weitere Sprache: `en.php` kopieren und übersetzen |
 | `theme/verein/hilfe.php` | liefert die Texte an das Fenster |
 
+**Ansprechpartner:** Auf der MRBS-Hilfeseite steht „Bitte kontaktieren Sie …
+für Fragen …“ mit Mail-Link. Name und E-Mail stellen Admins unter
+**Verwaltung → Ansprechpartner (Hilfeseite)** ganz unten ein (z. B. „unseren
+Administrator“). Leeres Feld = `$mrbs_admin` / `$mrbs_admin_email` aus der
+`config.inc.php`; `install.sh` setzt dort Name und Adresse des ersten Admins.
+
 Optional in der `config.inc.php` ein Link „Ausführliche Anleitung“ im Fenster,
 z. B. auf das eigene Vereins-Wiki:
 
@@ -331,6 +337,7 @@ patches/              Änderungen am MRBS-Code
   bootsuebersicht       Seite „Boote“, Wartungs-Logbuch, Schaden melden, Wartungsbericht; Verwaltung nur für Admins
   benutzerliste         Vor-/Nachname getrennt, Mitglieder sehen nur Namen und Rechte
   buchungszeitraum      Saisonbeginn/-ende in der Verwaltung einstellen
+  kontakt               Ansprechpartner der Hilfeseite in der Verwaltung einstellen
 theme/verein/         Aussehen (hell/dunkel, Handy-Ansicht wie eine App), Formular-Hilfen, Teilnehmerliste
   hilfe/                Hilfetexte (de, en, es) für den Menüpunkt „Hilfe“
   app/                  App-Manifest, Symbole, Service Worker, Offline-Seite
