@@ -301,6 +301,8 @@ return [
                  . '<li><strong>Agregar sala</strong> (un barco) o <strong>Modificar</strong> junto a un barco: nombre, capacidad, datos, información, enlaces a documentación y carpeta de fotos, correo de la persona que cuida el barco.</li>'
                  . '<li><strong>Deshabilitar</strong> un barco en lugar de eliminarlo: desaparece del plan, las reservas antiguas se mantienen.</li>'
                  . '</ul>'],
+        ['fuer' => 'admin', 'titel' => 'Persona de contacto (página de ayuda)',
+         'html' => '<p>Abajo del todo, en <strong>Ansprechpartner (Hilfeseite)</strong>, indicas a quién nombra la página de ayuda para preguntas: <strong>Name</strong> (nombre, se inserta en la frase «Póngase en contacto con …») y <strong>E-Mail</strong> (el nombre pasa a ser un enlace de correo). Un campo vacío usa el valor de config.inc.php.</p>'],
       ],
     ],
 

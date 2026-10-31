@@ -232,6 +232,9 @@ namespace MRBS;
 // --- Aussehen ---
 \$mrbs_company = $(php_str "$VEREIN");
 \$mrbs_company_url = 'index.php';        // Logo führt zur Startseite
+// Ansprechpartner auf der Hilfeseite – lässt sich unter Verwaltung ändern
+\$mrbs_admin = $(php_str "$ADMIN_NAME");
+$([ -n "$ADMIN_MAIL" ] && echo "\$mrbs_admin_email = $(php_str "$ADMIN_MAIL");" || true)
 \$mrbs_company_logo = 'Themes/verein/logo.svg';
 \$theme = 'verein';
 \$custom_js_url = 'Themes/verein/theme.js';

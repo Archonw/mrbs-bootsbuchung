@@ -302,6 +302,8 @@ return [
                  . '<li><strong>Boot hinzufügen</strong> bzw. beim Boot <strong>Bearbeiten</strong>: Name, Kapazität, Bootsdaten, Infos, Links zu Unterlagen und Fotoablage, E-Mail des Boot-Paten.</li>'
                  . '<li>Ein Boot <strong>deaktivieren</strong> statt löschen: Es verschwindet aus dem Plan, alte Buchungen bleiben.</li>'
                  . '</ul>'],
+        ['fuer' => 'admin', 'titel' => 'Ansprechpartner (Hilfeseite)',
+         'html' => '<p>Ganz unten stellst du ein, wen die Hilfeseite bei Fragen nennt: <strong>Name</strong> (wird in den Satz „Bitte kontaktieren Sie … für Fragen …“ eingesetzt, z. B. „unseren Administrator“) und <strong>E-Mail</strong> (der Name wird zum Mail-Link). Ein leeres Feld nimmt den Wert aus der config.inc.php.</p>'],
       ],
     ],
 

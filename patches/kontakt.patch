@@ -1,0 +1,234 @@
+diff --git a/web/admin.php b/web/admin.php
+index af26d3a..31698ef 100644
+--- a/web/admin.php
++++ b/web/admin.php
+@@ -610,4 +610,11 @@ if (is_admin() || !empty($enabled_areas))
+   echo "</div>\n";
+ }
+ 
++// Bootsbuchung-Anpassung (kontakt.patch): Ansprechpartner der Hilfeseite
++if (is_admin())
++{
++  require_once 'bb_kontakt.inc';
++  bb_kontakt_abschnitt();
++}
++
+ print_footer();
+diff --git a/web/bb_kontakt.inc b/web/bb_kontakt.inc
+new file mode 100644
+index 0000000..d4f566b
+--- /dev/null
++++ b/web/bb_kontakt.inc
+@@ -0,0 +1,157 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\ElementFieldset;
++use MRBS\Form\ElementInputSubmit;
++use MRBS\Form\FieldDiv;
++use MRBS\Form\FieldInputEmail;
++use MRBS\Form\FieldInputText;
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Ansprechpartner der Hilfeseite in der Verwaltung einstellen
++//
++// Auf help.php steht „Bitte kontaktieren Sie <Name> für Fragen …“, der Name
++// ist ein Mail-Link. MRBS nimmt dafür $mrbs_admin und $mrbs_admin_email aus
++// der config.inc.php. Admins stellen beides jetzt auf der Seite "Verwaltung"
++// (admin.php) ein. Gespeichert wird in mrbs_variables unter 'bb_kontakt'
++// als JSON {"name": …, "email": …}; keine neue Spalte oder Tabelle.
++//
++// Solange dort nichts gespeichert ist, gelten die Werte aus der
++// config.inc.php. Ein leeres Feld heißt ebenfalls: Wert aus der Config.
++// =============================================================================
++
++const BB_KONTAKT_VAR = 'bb_kontakt';
++
++
++// Gespeicherte Angaben, null = noch nie gespeichert
++function bb_kontakt_gespeichert() : ?array
++{
++  static $kontakt = false;
++
++  if ($kontakt === false)
++  {
++    $kontakt = null;
++    try
++    {
++      $res = db()->query_array("SELECT variable_content
++                                  FROM " . _tbl('variables') . "
++                                 WHERE variable_name=?
++                                 LIMIT 1", [BB_KONTAKT_VAR]);
++      if (count($res) > 0)
++      {
++        $daten = json_decode((string) $res[0], true);
++        if (is_array($daten))
++        {
++          $email = trim((string) ($daten['email'] ?? ''));
++          $kontakt = [
++            'name'  => trim((string) ($daten['name'] ?? '')),
++            'email' => (filter_var($email, FILTER_VALIDATE_EMAIL) !== false) ? $email : ''
++          ];
++        }
++      }
++    }
++    catch (\Throwable $e)
++    {
++      trigger_error('Ansprechpartner nicht lesbar: ' . $e->getMessage(), E_USER_WARNING);
++    }
++  }
++
++  return $kontakt;
++}
++
++
++// Setzt $mrbs_admin / $mrbs_admin_email aus der Verwaltung (leere Felder
++// lassen den Wert aus der config.inc.php stehen)
++function bb_kontakt_anwenden() : void
++{
++  global $mrbs_admin, $mrbs_admin_email;
++
++  $k = bb_kontakt_gespeichert();
++  if (!isset($k))
++  {
++    return;
++  }
++  if ($k['name'] !== '')
++  {
++    $mrbs_admin = $k['name'];
++  }
++  if ($k['email'] !== '')
++  {
++    $mrbs_admin_email = $k['email'];
++  }
++}
++
++
++function bb_kontakt_speichern(string $name, string $email) : void
++{
++  $sql_params = [];
++  $data = [
++    'variable_name'    => BB_KONTAKT_VAR,
++    'variable_content' => json_encode(['name' => $name, 'email' => $email])
++  ];
++  $sql = db()->syntax_upsert($data, _tbl('variables'), $sql_params, 'variable_name', ['id'], true);
++  db()->command($sql, $sql_params);
++}
++
++
++// Abschnitt "Ansprechpartner (Hilfeseite)" auf der Seite Verwaltung
++function bb_kontakt_abschnitt() : void
++{
++  global $mrbs_admin, $mrbs_admin_email;
++
++  $k = bb_kontakt_gespeichert() ?? ['name' => '', 'email' => ''];
++
++  echo "<h2>Ansprechpartner (Hilfeseite)</h2>\n";
++  echo "<div id=\"bb_kontakt\">\n";
++
++  $status = get_form_var('kontakt', 'string');
++  if ($status === 'ok')
++  {
++    echo "<p class=\"bb-bz-ok\">Gespeichert.</p>\n";
++  }
++  elseif ($status === 'email')
++  {
++    echo "<p class=\"error\">Nicht gespeichert: Die E-Mail-Adresse ist ungültig.</p>\n";
++  }
++
++  // Was die Hilfeseite gerade zeigt
++  $name  = ($k['name'] !== '') ? $k['name'] : (string) $mrbs_admin;
++  $email = ($k['email'] !== '') ? $k['email'] : (string) $mrbs_admin_email;
++  echo '<p>Auf der Hilfeseite steht derzeit: ' .
++       escape_html(get_vocab('please_contact', $name)) .
++       ' (Mail an ' . escape_html($email) . ')</p>' . "\n";
++  echo "<p>Der Name wird in den Satz eingesetzt, z. B. „unseren Administrator“ oder „Max Mustermann“. " .
++       "Leeres Feld = Wert aus der config.inc.php.</p>\n";
++
++  $form = new Form(Form::METHOD_POST);
++  $form->setAttributes([
++      'class'  => 'standard',
++      'id'     => 'bb_kontakt_form',
++      'action' => multisite('bb_kontakt.php')
++    ]);
++
++  $f_name = new FieldInputText();
++  $f_name->setLabel('Name')
++         ->setControlAttributes(['name' => 'kontakt_name', 'value' => $k['name'], 'maxlength' => 100]);
++  $f_email = new FieldInputEmail();
++  $f_email->setLabel('E-Mail')
++          ->setControlAttributes(['name' => 'kontakt_email', 'value' => $k['email'], 'maxlength' => 200]);
++
++  $submit = new ElementInputSubmit();
++  $submit->setAttributes(['class' => 'default_action', 'value' => get_vocab('save')]);
++  $knopf = new FieldDiv();
++  $knopf->setAttribute('class', 'submit_buttons')
++        ->addLabelClass('no_suffix')
++        ->addControlElement($submit);
++
++  $fieldset = new ElementFieldset();
++  $fieldset->addElement($f_name)
++           ->addElement($f_email)
++           ->addElement($knopf);
++  $form->addElement($fieldset)
++       ->render();
++
++  echo "</div>\n";
++}
+diff --git a/web/bb_kontakt.php b/web/bb_kontakt.php
+new file mode 100644
+index 0000000..caf977c
+--- /dev/null
++++ b/web/bb_kontakt.php
+@@ -0,0 +1,34 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++use MRBS\Form\Form;
++
++// =============================================================================
++// Bootsbuchung-Anpassung: Ansprechpartner der Hilfeseite speichern
++//
++// Ziel des Formulars "Ansprechpartner (Hilfeseite)" auf der Seite Verwaltung
++// (admin.php, siehe bb_kontakt.inc). Nur für Admins: die Seite steht nicht
++// in get_page_level() und fällt damit unter "nur Admins".
++// =============================================================================
++
++require 'defaultincludes.inc';
++require_once 'bb_kontakt.inc';
++
++Form::checkToken();
++checkAuthorised(this_page());
++
++$name  = mb_substr(trim((string) get_form_var('kontakt_name', 'string', '')), 0, 100);
++$email = mb_substr(trim((string) get_form_var('kontakt_email', 'string', '')), 0, 200);
++
++if (($email !== '') && (filter_var($email, FILTER_VALIDATE_EMAIL) === false))
++{
++  $status = 'email';
++}
++else
++{
++  bb_kontakt_speichern($name, $email);
++  $status = 'ok';
++}
++
++location_header('admin.php?kontakt=' . $status . '#bb_kontakt');
+diff --git a/web/help.php b/web/help.php
+index cf77d0b..7d14e61 100644
+--- a/web/help.php
++++ b/web/help.php
+@@ -76,6 +76,10 @@ echo "\n</p>\n";
+ 
+ echo "<h3>" . get_vocab("help") . "</h3>\n";
+ echo "<p>\n";
++// Bootsbuchung-Anpassung (kontakt.patch): Ansprechpartner aus der Verwaltung
++require_once 'bb_kontakt.inc';
++bb_kontakt_anwenden();
++
+ // Obfuscate the email address
+ $html = '<a href="mailto:' . rawurlencode($mrbs_admin_email) . '">' . escape_html($mrbs_admin) . '</a>';
+ $contact = '<span class="contact" data-html="' . base64_encode($html) . '">' . escape_html($mrbs_admin) . '</span>';
