@@ -87,6 +87,9 @@ fi
 echo "==> Neu starten"
 docker compose up -d
 docker image prune -f >/dev/null
+# Build-Cache leeren: wächst sonst mit jedem Update und füllt kleine Platten.
+# Die Images selbst (auch :vorher für den Rückweg) bleiben.
+docker builder prune -af >/dev/null || true
 
 # Datenbank-Erweiterungen nachziehen (mehrfach ausführen ist harmlos)
 for i in $(seq 30); do

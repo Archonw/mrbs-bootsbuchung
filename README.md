@@ -171,6 +171,12 @@ Kopiere den Ordner `data/sicherung/` zusammen mit `config/` und `.env`
 regelmäßig an einen anderen Ort (z. B. Vereins-Nextcloud, rsync, restic) –
 sonst ist bei einem Serverausfall alles weg.
 
+**Platte voll?** `update.sh` räumt am Ende unbenutzte Images und den
+Docker-Build-Cache selbst weg. Reicht der Platz trotzdem nicht: `df -h /` und
+`docker system df` zeigen, wo er steckt. Nach einem Kernel-Update erst neu
+starten, dann entfernt `sudo apt autoremove --purge` den alten Kernel. Das
+Image `bootsbuchung-mrbs:vorher` (Rückweg) und `data/` nicht löschen.
+
 **Mail später einrichten:** In `config/config.inc.php` die Zeile
 `$mail_settings['disabled'] = true;` durch die SMTP-Zeilen ersetzen (Vorlage:
 Abschnitt „Mail“ in `install.sh`), Container neu starten und mit dem
