@@ -87,6 +87,10 @@ fi
 echo "==> Neu starten"
 docker compose up -d
 docker image prune -f >/dev/null
+# Alten Build-Cache leeren: wächst sonst mit jedem Update und füllt kleine
+# Platten. Nur was 30 Tage unbenutzt ist, sonst müsste jedes Update die
+# PHP-Erweiterungen neu kompilieren. Die Images (auch :vorher) bleiben.
+docker builder prune -af --filter until=720h >/dev/null || true
 
 # Datenbank-Erweiterungen nachziehen (mehrfach ausführen ist harmlos)
 for i in $(seq 30); do
