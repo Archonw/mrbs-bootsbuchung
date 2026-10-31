@@ -87,6 +87,9 @@ fi
 echo "==> Neu starten"
 docker compose up -d
 docker image prune -f >/dev/null
+# Build-Cache begrenzen: was 30 Tage nicht benutzt wurde, kommt weg. Die PHP-Schichten
+# bleiben, solange regelmäßig gebaut wird, sonst würde jedes Update neu kompilieren.
+docker builder prune -af --filter until=720h >/dev/null
 
 # Datenbank-Erweiterungen nachziehen (mehrfach ausführen ist harmlos)
 for i in $(seq 30); do
