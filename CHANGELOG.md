@@ -8,9 +8,10 @@ ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 
 ## 2026-10-31 – update.sh räumt den Build-Cache weg
 
-- **Speicherplatz:** `update.sh` löscht am Ende jetzt auch den Docker-Build-Cache
-  (`docker builder prune -af`). Der wuchs bisher mit jedem Update und konnte
-  auf kleinen Servern mehrere hundert MB belegen. Die Images bleiben, auch
+- **Speicherplatz:** `update.sh` löscht am Ende jetzt Docker-Build-Cache, der
+  30 Tage nicht benutzt wurde. Der wuchs bisher mit jedem Update und konnte
+  auf kleinen Servern mehrere hundert MB belegen. Jüngerer Cache bleibt, damit
+  ein Update nicht jedes Mal PHP neu kompiliert. Die Images bleiben, auch
   `bootsbuchung-mrbs:vorher` für den Rückweg.
 
 Für bestehende Installationen ist nichts von Hand zu tun.
