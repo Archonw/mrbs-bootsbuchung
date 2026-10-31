@@ -3,3 +3,6 @@
 .installiert
 config/config.inc.php
 data/
+
+# Eigene Hilfetexte des Vereins
+theme/verein/hilfe/*.local.php

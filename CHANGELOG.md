@@ -6,6 +6,21 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-10-31 – Hilfe zur aktuellen Seite (Deutsch, Englisch, Spanisch)
+
+- **Hilfe:** Der Menüpunkt „Hilfe“ öffnet ein Fenster, das die gerade offene
+  Seite erklärt (Belegungsplan, Buchungsformular, Buchung, Mitsegeln & Kurse,
+  Boote, Bootsseite, Logbuch, Schaden melden, Benachrichtigungen,
+  Benutzerliste, Verwaltung …), am Handy als Blatt von unten. Unten im
+  Fenster lässt sich ein anderes Thema wählen; auf `help.php` steht die ganze
+  Hilfe zum Aufklappen. Abschnitte für Segellehrer, Bootswartung und Admins
+  sehen nur diese.
+- **Sprachen:** Deutsch, Englisch, Spanisch, passend zur Sprache von MRBS.
+  Weitere Sprachen und eigene Vereinstexte siehe README, „Hilfe und Sprachen“.
+
+Für bestehende Installationen ist nichts von Hand zu tun (nur Theme, kein
+SQL). Optional: `$bb_hilfe_url` für einen Link „Ausführliche Anleitung“.
+
 ## 2026-10-31 – Saison in der Verwaltung
 
 - **Buchungszeitraum (Saison):** Ab wann und bis wann gebucht werden darf,

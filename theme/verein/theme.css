@@ -1947,3 +1947,110 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   #bb-boote .bb-boot-titelbild img { max-height: 70vh; }
   #bb-boote .bb-wartung-zeile { flex-direction: column; gap: 0.75rem; }
 }
+
+/* ---------- 19. Hilfe zur aktuellen Seite (theme.js, hilfe.php) ----------- */
+dialog.bb-hilfe {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: min(85vh, 52rem);
+  padding: 0;
+  border: 1px solid var(--bb-border);
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+dialog.bb-hilfe[open] { display: flex; flex-direction: column; }
+dialog.bb-hilfe::backdrop { background: rgba(8, 10, 9, 0.55); }
+.bb-hilfe-kopf {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--bb-border-soft);
+}
+.bb-hilfe-ueber { margin: 0; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--bb-accent); }
+.bb-hilfe-kopf h2 { margin: 0.1rem 0 0; font-size: 1.25rem; line-height: 1.25; }
+.bb-hilfe-zu {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bb-surface-2);
+  color: var(--bb-text);
+  cursor: pointer;
+}
+.bb-hilfe-zu:hover, .bb-hilfe-zu:focus-visible { background: var(--bb-accent-tint); outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+.bb-hilfe-inhalt { flex: 1 1 auto; overflow-y: auto; padding: 0.25rem 1.25rem 1rem; overscroll-behavior: contain; }
+.bb-hilfe-inhalt[aria-busy="true"] { opacity: 0.55; }
+.bb-hilfe-abschnitt h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0.35rem;
+  font-size: 1rem;
+}
+.bb-hilfe-text p, .bb-hilfe-text ul, .bb-hilfe-text ol { margin: 0 0 0.5rem; }
+.bb-hilfe-text ul, .bb-hilfe-text ol { padding-left: 1.25rem; }
+.bb-hilfe-text li { margin: 0.2rem 0; }
+.bb-hilfe-rolle {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.bb-hilfe-admin .bb-hilfe-rolle { background: var(--bb-type-b); color: var(--bb-on-type); }
+.bb-hilfe-segellehrer .bb-hilfe-rolle { background: var(--bb-kurs); color: var(--bb-on-type); }
+.bb-hilfe-fehler { margin: 1rem 0; color: var(--bb-danger); }
+.bb-hilfe-fuss {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.75rem 1.25rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--bb-border-soft);
+  background: var(--bb-surface-2);
+}
+.bb-hilfe-wahl { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 0.9rem; color: var(--bb-muted); }
+.bb-hilfe-wahl[hidden] { display: none; }
+.bb-hilfe-wahl select { max-width: 16rem; min-height: 38px; }
+.bb-hilfe-links { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; margin: 0; font-size: 0.9rem; }
+
+/* help.php: ganze Hilfe zum Aufklappen */
+.bb-hilfe-alles { max-width: 48rem; margin: 0 0 2rem; }
+.bb-hilfe-alles > h2 { margin: 0 0 0.75rem; }
+.bb-hilfe-alles details {
+  margin: 0 0 0.5rem;
+  padding: 0 1rem;
+  border: 1px solid var(--bb-border);
+  border-radius: var(--bb-radius-sm);
+  background: var(--bb-surface);
+}
+.bb-hilfe-alles summary { padding: 0.75rem 0; font-weight: 600; cursor: pointer; }
+.bb-hilfe-alles details[open] { padding-bottom: 0.75rem; }
+.bb-hilfe-alles .bb-hilfe-abschnitt h3 { margin-top: 0.5rem; }
+
+/* Handy: Blatt von unten über die ganze Breite */
+@media (max-width: 640px) {
+  dialog.bb-hilfe {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 88vh;
+    margin: auto 0 0;
+    border-radius: var(--bb-radius) var(--bb-radius) 0 0;
+    border-bottom: 0;
+  }
+  .bb-hilfe-fuss { flex-direction: column; align-items: stretch; }
+  .bb-hilfe-wahl { flex-direction: column; align-items: stretch; gap: 0.25rem; }
+  .bb-hilfe-wahl select { max-width: none; width: 100%; }
+}

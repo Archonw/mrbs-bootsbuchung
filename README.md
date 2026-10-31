@@ -25,6 +25,13 @@ The user interface is German.*
 - Handy-Ansicht wie eine App: Navigation unten, Tagesplan als Karten je Boot,
   „+“-Knopf für neue Buchungen, übersichtliches Buchungsformular
 
+**Hilfe direkt in der Buchung – Deutsch, Englisch, Spanisch**
+- Der Menüpunkt „Hilfe“ erklärt die Seite, auf der man gerade ist
+  (Belegungsplan, Buchungsformular, Bootsseite, Logbuch …), andere Themen
+  lassen sich im Fenster auswählen
+- Jede Rolle sieht, was sie betrifft: Mitglieder, Segellehrer, Bootswartung, Admins
+- Weitere Sprachen: eine Datei pro Sprache (siehe [Hilfe und Sprachen](#hilfe-und-sprachen))
+
 **App und Push-Benachrichtigungen**
 - Als App aufs Handy: über den Browser („App installieren“ / „Zum
   Home-Bildschirm“) oder mit der Android-App
@@ -268,6 +275,40 @@ für Stunden und Kosten je Boot und Download als CSV (für Excel).
 (`bootswartung` steht in `$auth['db']['protected_fields']`; bei älteren
 Installationen ergänzt `update.sh` das).
 
+## Hilfe und Sprachen
+
+Der Menüpunkt **Hilfe** öffnet ein Fenster mit der Hilfe zur gerade offenen
+Seite (am Handy ein Blatt von unten). Auf der MRBS-Seite `help.php` steht
+zusätzlich die ganze Hilfe zum Aufklappen. Welche Abschnitte jemand sieht,
+entscheidet der Server nach Rolle (nicht angemeldet, Mitglied, Segellehrer,
+Bootswartung, Admin).
+
+**Sprache:** Die Hilfe nimmt die Sprache, in der MRBS die Seite anzeigt.
+Mitgeliefert sind Deutsch, Englisch und Spanisch; fehlt eine Sprache, kommt
+Englisch. `install.sh` stellt MRBS fest auf Deutsch. Sollen Mitglieder die
+Sprache ihres Browsers bekommen, in der `config.inc.php` die Zeile
+`$disable_automatic_language_changing = true;` entfernen (oder auf `false`
+setzen) und `docker compose restart mrbs`. Die eigenen Seiten dieser
+Bootsbuchung (Mitsegeln & Kurse, Boote, Logbuch …) sind nur auf Deutsch;
+die englische und spanische Hilfe nennt deren Knöpfe deshalb auf Deutsch mit
+Übersetzung.
+
+**Texte anpassen oder ergänzen:**
+
+| Datei | Zweck |
+|---|---|
+| `theme/verein/hilfe/de.php`, `en.php`, `es.php` | Hilfetexte je Sprache, Aufbau steht oben in der Datei |
+| `theme/verein/hilfe/<sprache>.local.php` | eigene Texte des Vereins, z. B. Ansprechpartner oder Regeln. Gleicher Aufbau; gleichnamige Seiten werden ersetzt, neue kommen dazu. Bleibt bei Updates erhalten (nicht im Repo) |
+| `theme/verein/hilfe/fr.php` usw. | weitere Sprache: `en.php` kopieren und übersetzen |
+| `theme/verein/hilfe.php` | liefert die Texte an das Fenster |
+
+Optional in der `config.inc.php` ein Link „Ausführliche Anleitung“ im Fenster,
+z. B. auf das eigene Vereins-Wiki:
+
+```php
+$bb_hilfe_url = 'https://www.mein-verein.de/bootsbuchung-anleitung';
+```
+
 ## Wie ist das aufgebaut?
 
 MRBS selbst liegt **nicht** in diesem Repo. `update.sh` holt die gewünschte
@@ -291,6 +332,7 @@ patches/              Änderungen am MRBS-Code
   benutzerliste         Vor-/Nachname getrennt, Mitglieder sehen nur Namen und Rechte
   buchungszeitraum      Saisonbeginn/-ende in der Verwaltung einstellen
 theme/verein/         Aussehen (hell/dunkel, Handy-Ansicht wie eine App), Formular-Hilfen, Teilnehmerliste
+  hilfe/                Hilfetexte (de, en, es) für den Menüpunkt „Hilfe“
   app/                  App-Manifest, Symbole, Service Worker, Offline-Seite
 sql/                  zusätzliche Datenbankfelder (Segellehrer, Kurs, Push, Boote, Logbuch)
 maintenance/          nächtliche Wartung: Sicherung, Sitzungen aufräumen, Erinnerung

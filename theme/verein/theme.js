@@ -1428,6 +1428,253 @@
 
 
 /* =============================================================================
+   Hilfe zur aktuellen Seite
+
+   Der Menüpunkt „Hilfe“ öffnet ein Fenster, das die Seite erklärt, auf der
+   man gerade ist (am Handy als Blatt von unten). Unten im Fenster lässt sich
+   ein anderes Thema wählen. Auf help.php steht zusätzlich die ganze Hilfe
+   zum Aufklappen über den MRBS-Angaben.
+   Die Texte liefert Themes/verein/hilfe.php aus hilfe/<sprache>.php (de, en, es
+   – passend zur Sprache von MRBS), je nach
+   Rolle (Gast, Mitglied, Segellehrer, Bootswartung, Admin).
+   Strg-/Mittelklick auf „Hilfe“ öffnet wie bisher help.php.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var URL_HILFE = 'Themes/verein/hilfe.php';
+  var ROLLEN = ['gast', 'segellehrer', 'bootswartung', 'admin'];
+  var cache = {};
+  var dialog = null;
+
+  // Welche Seite ist offen? Schlüssel wie in hilfe/de.php
+  function hilfeSeite() {
+    if (document.getElementById('logon')) {
+      return 'anmelden';
+    }
+    var q = new URLSearchParams(location.search);
+    var datei = (location.pathname.match(/([^\/]+\.php)$/) || [null, 'index.php'])[1];
+    switch (datei) {
+      case 'index.php':                 return 'plan';
+      case 'edit_entry.php':
+      case 'edit_entry_handler.php':    return 'buchen';
+      case 'view_entry.php':            return 'buchung';
+      case 'bb_mitsegeln.php':         return 'mitsegeln';
+      case 'bb_boote.php':             return q.get('boot') ? 'boot' : 'boote';
+      case 'bb_wartung.php':           return (q.get('schaden') === '1' || q.get('aendern')) ? 'schaden' : 'logbuch';
+      case 'bb_wartung_bericht.php':   return 'wartungsbericht';
+      case 'report.php':                return 'bericht';
+      case 'search.php':                return 'suche';
+      case 'bb_benachrichtigungen.php': return 'benachrichtigungen';
+      case 'edit_users.php':            return 'benutzer';
+      case 'admin.php':                 return 'verwaltung';
+      case 'edit_room.php':             return 'boot_bearbeiten';
+      case 'edit_area.php':             return 'verein_bearbeiten';
+      case 'import.php':                return 'import';
+      default:                          return 'allgemein';
+    }
+  }
+
+  // Wenn der Server nicht antwortet, gibt es auch keine Texte von dort
+  var FEHLER = {
+    de: 'Die Hilfe ließ sich gerade nicht laden. Bitte später noch einmal versuchen.',
+    en: 'The help could not be loaded. Please try again later.',
+    es: 'No se ha podido cargar la ayuda. Inténtalo de nuevo más tarde.'
+  };
+  function fehlerText() {
+    var l = (document.documentElement.lang || 'en').toLowerCase().split('-')[0];
+    return FEHLER[l] || FEHLER.en;
+  }
+
+  function laden(seite) {
+    if (!cache[seite]) {
+      cache[seite] = fetch(URL_HILFE + '?seite=' + encodeURIComponent(seite), { credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.json();
+        })
+        .catch(function (e) { delete cache[seite]; throw e; });
+    }
+    return cache[seite];
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text) { e.textContent = text; }
+    return e;
+  }
+
+  // Abschnitte einer Seite; html kommt aus den Hilfedateien des Themes
+  function abschnitte(ziel, liste, texte) {
+    liste.forEach(function (a) {
+      var s = el('section', 'bb-hilfe-abschnitt');
+      var h = el('h3', null, a.titel);
+      if (ROLLEN.indexOf(a.fuer) >= 0 && texte['rolle_' + a.fuer]) {
+        s.classList.add('bb-hilfe-' + a.fuer);
+        h.appendChild(el('span', 'bb-hilfe-rolle', texte['rolle_' + a.fuer]));
+      }
+      s.appendChild(h);
+      var d = el('div', 'bb-hilfe-text');
+      d.innerHTML = a.html;
+      s.appendChild(d);
+      ziel.appendChild(s);
+    });
+  }
+
+  function bauen() {
+    dialog = el('dialog', 'bb-hilfe');
+    dialog.setAttribute('aria-labelledby', 'bb-hilfe-titel');
+    dialog.innerHTML =
+      '<div class="bb-hilfe-kopf">' +
+        '<div><p class="bb-hilfe-ueber"></p><h2 id="bb-hilfe-titel"></h2></div>' +
+        '<button type="button" class="bb-hilfe-zu">' +
+          '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>' +
+        '</button>' +
+      '</div>' +
+      '<div class="bb-hilfe-inhalt"></div>' +
+      '<div class="bb-hilfe-fuss">' +
+        '<div class="bb-hilfe-wahl"><span id="bb-hilfe-wahl-text"></span>' +
+          '<select aria-labelledby="bb-hilfe-wahl-text"></select></div>' +
+        '<p class="bb-hilfe-links"></p>' +
+      '</div>';
+    dialog.querySelector('.bb-hilfe-zu').addEventListener('click', function () { dialog.close(); });
+    // Tipp neben das Fenster schließt es
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) { dialog.close(); }
+    });
+    dialog.querySelector('select').addEventListener('change', function () {
+      zeigen(this.value);
+    });
+    document.body.appendChild(dialog);
+  }
+
+  function zeigen(seite) {
+    var inhalt = dialog.querySelector('.bb-hilfe-inhalt');
+    inhalt.setAttribute('aria-busy', 'true');
+    laden(seite).then(function (j) {
+      var t = j.texte || {};
+      var s = j.seite || { titel: t.titel || 'Hilfe', abschnitte: [] };
+      dialog.querySelector('.bb-hilfe-ueber').textContent = t.titel || 'Hilfe';
+      dialog.querySelector('#bb-hilfe-titel').textContent = s.titel;
+      dialog.querySelector('.bb-hilfe-zu').setAttribute('aria-label', t.schliessen || 'Schließen');
+      inhalt.textContent = '';
+      abschnitte(inhalt, s.abschnitte || [], t);
+      inhalt.scrollTop = 0;
+
+      var wahl = dialog.querySelector('.bb-hilfe-wahl');
+      wahl.querySelector('span').textContent = t.themen || '';
+      var sel = wahl.querySelector('select');
+      sel.textContent = '';
+      (j.themen || []).forEach(function (th) {
+        var o = el('option', null, th.titel);
+        o.value = th.seite;
+        o.selected = (th.seite === s.seite);
+        sel.appendChild(o);
+      });
+      wahl.hidden = (j.themen || []).length < 2;
+
+      var links = dialog.querySelector('.bb-hilfe-links');
+      links.textContent = '';
+      if (j.mehr) {
+        var m = el('a', null, t.mehr || 'Mehr');
+        m.href = j.mehr;
+        m.target = '_blank';
+        m.rel = 'noopener';
+        links.appendChild(m);
+      }
+      var u = el('a', null, t.ueber || 'help.php');
+      u.href = 'help.php';
+      links.appendChild(u);
+    }).catch(function () {
+      inhalt.textContent = '';
+      inhalt.appendChild(el('p', 'bb-hilfe-fehler', fehlerText()));
+    }).then(function () {
+      inhalt.removeAttribute('aria-busy');
+    });
+  }
+
+  function oeffnen() {
+    if (!dialog) { bauen(); }
+    zeigen(hilfeSeite());
+    if (!dialog.open) { dialog.showModal(); }
+  }
+
+  // Klick auf „Hilfe“ im Menü
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('header.banner nav.menu a[href]');
+    if (!a || !/(^|\/)help\.php(\?|#|$)/.test(a.getAttribute('href'))) {
+      return;
+    }
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey ||
+        typeof HTMLDialogElement !== 'function' || /help\.php$/.test(location.pathname)) {
+      return;   // normal zu help.php
+    }
+    e.preventDefault();
+    // Am Handy erst das Menü-Blatt schließen
+    var banner = document.querySelector('header.banner.bb-menu-open');
+    var t = banner && banner.querySelector('.bb-menu-toggle');
+    if (t) { t.click(); }
+    oeffnen();
+  });
+
+  // Menüpunkt kennzeichnen (Bildschirmleser: öffnet ein Fenster)
+  function markieren() {
+    document.querySelectorAll('header.banner nav.menu a[href*="help.php"]').forEach(function (a) {
+      a.setAttribute('aria-haspopup', 'dialog');
+      a.classList.add('bb-menu-hilfe');
+    });
+  }
+
+  // help.php: ganze Hilfe zum Aufklappen über den MRBS-Angaben
+  function hilfeSeiteAufbauen() {
+    if (!/help\.php$/.test(location.pathname) || document.querySelector('.bb-hilfe-alles')) {
+      return;
+    }
+    // Nicht die (versteckte) .contents im Hinweis für alte Browser
+    var ziel = Array.prototype.filter.call(document.querySelectorAll('.contents'), function (c) {
+      return !c.closest('.unsupported_message');
+    })[0];
+    if (!ziel) {
+      return;
+    }
+    laden('alle').then(function (j) {
+      var t = j.texte || {};
+      var box = el('section', 'bb-hilfe-alles');
+      box.appendChild(el('h2', null, t.alle_themen || t.titel || 'Hilfe'));
+      (j.seiten || []).forEach(function (s, i) {
+        var d = el('details');
+        if (i === 0) { d.open = true; }
+        d.appendChild(el('summary', null, s.titel));
+        abschnitte(d, s.abschnitte || [], t);
+        box.appendChild(d);
+      });
+      if (j.mehr) {
+        var p = el('p', 'bb-hilfe-links');
+        var m = el('a', null, t.mehr || 'Mehr');
+        m.href = j.mehr;
+        m.target = '_blank';
+        m.rel = 'noopener';
+        p.appendChild(m);
+        box.appendChild(p);
+      }
+      ziel.insertBefore(box, ziel.firstChild);
+    }).catch(function () { /* dann bleibt help.php wie es ist */ });
+  }
+
+  function init() {
+    markieren();
+    hilfeSeiteAufbauen();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+
+/* =============================================================================
    Menü der Kopfzeile ordnen
 
    Erst was alle Mitglieder brauchen, dann die Punkte für Admins, Hilfe zum
