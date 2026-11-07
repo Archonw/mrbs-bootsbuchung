@@ -6,6 +6,15 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-07 – Handy: Seitenende nicht mehr von der Navigation verdeckt
+
+- **Handy:** Beim Runterscrollen verdeckten die App-Navigation unten und das
+  Impressum-Schild das Ende der Seite, z. B. die letzte Karte in der
+  Bootsübersicht. Der Abstand unten wirkt jetzt auf allen Seiten und reicht
+  auch für das Impressum-Schild.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-10-31 – update.sh räumt den Build-Cache weg
 
 - **Speicherplatz:** `update.sh` löscht am Ende jetzt Docker-Build-Cache, der

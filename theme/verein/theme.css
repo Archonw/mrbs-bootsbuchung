@@ -1296,8 +1296,12 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   }
   .bb-appnav-gast svg { width: 24px; height: 24px; padding: 0; }
 
-  /* Platz für die Leiste, Impressum darüber */
-  html.bb-hat-appnav body { padding-bottom: calc(var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom))) + 8px); }
+  /* Platz für die Leiste und das Impressum-Schild darüber. MRBS lässt
+     .contents floaten, ohne den Float aufzulösen zählt der Inhalt nicht
+     zur Höhe von body und der Abstand unten landet hinter dem Inhalt
+     (letzte Bootskarte verdeckt). Das ::after schließt den Float ab. */
+  html.bb-hat-appnav body { padding-bottom: calc(var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom))) + 3.25rem); }
+  html.bb-hat-appnav body::after { content: ""; display: block; clear: both; }
   html.bb-hat-appnav .bb-footer { bottom: calc(76px + env(safe-area-inset-bottom)); }
 
   .bb-fab {
@@ -1592,12 +1596,6 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
     border-radius: 0;
     border-top: 1px solid var(--bb-border);
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
-  }
-  /* Platz unter der Leiste, sonst verdeckt sie am Seitenende die letzten
-     Felder (der Abstand am body greift hier nicht, das Formular ragt
-     darüber hinaus) */
-  html.bb-hat-appnav form#main[action$="edit_entry_handler.php"] {
-    padding-bottom: var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom)));
   }
   html.bb-hat-appnav form#main[action$="edit_entry_handler.php"] > fieldset:has(.submit_buttons) {
     bottom: var(--bb-appnav-h, calc(64px + env(safe-area-inset-bottom)));
