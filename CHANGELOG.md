@@ -6,6 +6,23 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Plan: freie Zeiten und lesbare Buchungen
+
+- **Handy, Tagesplan:** Jede Bootskarte hat eine Zeitleiste über den Tag
+  (belegt in den Farben der Buchungen, rote Linie für jetzt). Darunter stehen
+  die freien Zeiten als Knöpfe – „Frei bis 14:00“, „Ab 16:00“, „Frei ab
+  17:00 · buchen“. Ein Tipp öffnet die Buchung gleich mit dieser Startzeit.
+- **Computer, Tagesansicht:** In jeder Buchung stehen unter dem Namen die
+  Uhrzeit und die Belegung als Schild („0/5“).
+- **Computer, Woche aller Boote:** Statt schmaler Streifen, in denen nur
+  „Ja“ oder „Opt“ Platz hatte, stehen die Buchungen eines Tages als
+  Kärtchen mit Uhrzeit und Name untereinander.
+- **Mitsegeln** ist jetzt hell mit grünem Rand statt vollgrün: fällt auf,
+  ohne die anderen Buchungen zu übertönen.
+- **Legende** unter dem Plan: Buchung, Mitsegler willkommen, Kurs, voll.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Kopfzeile am Computer in einer Zeile
 
 - **Kopfzeile:** Am Computer steht alles in einer Zeile: vorne Plan,

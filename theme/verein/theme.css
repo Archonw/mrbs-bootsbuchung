@@ -1005,16 +1005,18 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
 .all_rooms td a div.bb-kurs { background: var(--bb-kurs) !important; color: var(--bb-on-type) !important; }
 .all_rooms td a div.bb-kurs { box-shadow: inset 3px 0 0 var(--bb-kurs-strong); }
 
-/* Mitsegeln: kräftiges Grün – normale Buchungen sind hellgrün */
+/* Mitsegeln: hell mit grünem Rand – fällt auf, ohne die anderen Buchungen
+   zu übertönen (bis November 2026 vollgrün) */
 .dwm_main .booking.spaces:not(.bb-kurs),
 .dwm_main .booking.full:not(.bb-kurs) {
-  background-color: var(--bb-mitsegeln) !important;
-  color: var(--bb-on-mitsegeln) !important;
+  background-color: var(--bb-surface) !important;
+  color: var(--bb-text) !important;
+  box-shadow: var(--bb-booking-highlight), inset 0 0 0 2px var(--bb-mitsegeln-strong);
 }
 .dwm_main .booking.spaces:not(.bb-kurs) a,
-.dwm_main .booking.full:not(.bb-kurs) a { color: var(--bb-on-mitsegeln) !important; }
+.dwm_main .booking.full:not(.bb-kurs) a { color: var(--bb-text) !important; }
 .all_rooms td a div.spaces:not(.bb-kurs),
-.all_rooms td a div.full:not(.bb-kurs) { background: var(--bb-mitsegeln) !important; color: var(--bb-on-mitsegeln) !important; }
+.all_rooms td a div.full:not(.bb-kurs) { background: var(--bb-surface) !important; color: var(--bb-text) !important; box-shadow: inset 0 0 0 2px var(--bb-mitsegeln-strong); }
 
 /* Marke vor dem Namen (Tagesansicht und Wochenansicht eines Bootes) */
 .dwm_main .booking.spaces > a::before,
@@ -1458,6 +1460,44 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
   .bb-bootkarte .kurs .marke { background: var(--bb-kurs-strong); color: #fff; box-shadow: none; }
   .bb-bootkarte .plaetze { font-size: 0.85rem; font-weight: 600; color: var(--bb-muted); font-variant-numeric: tabular-nums; }
   .bb-frei { margin: 0; color: var(--bb-muted); }
+
+  /* Zeitleiste über den Tag und freie Zeiten (theme.js) */
+  .bb-zeitleiste {
+    position: relative;
+    height: 14px;
+    margin: 0.1rem 0 0.2rem;
+    border-radius: 5px;
+    background: var(--bb-surface-2);
+    box-shadow: inset 0 0 0 1px var(--bb-border-soft);
+    overflow: hidden;
+  }
+  .bb-zeitleiste > span { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; background: var(--bb-streifen); }
+  .bb-zeitleiste > span.mitsegeln { background: var(--bb-mitsegeln-strong); }
+  .bb-zeitleiste > span.kurs { background: var(--bb-kurs-strong); }
+  .bb-zeitleiste > i { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--bb-danger); }
+  .bb-zeitachse {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.45rem;
+    font-size: 0.68rem;
+    color: var(--bb-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .bb-luecken { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
+  .bb-luecke {
+    display: inline-flex;
+    align-items: center;
+    min-height: 38px;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    background: var(--bb-accent-tint);
+    color: var(--bb-on-tint) !important;
+    font-size: 0.88rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-decoration: none;
+  }
+  .bb-luecke:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
   .bb-buchen {
     display: inline-flex;
     align-items: center;
@@ -2199,4 +2239,84 @@ html.bb-nicht-buchbar .bb-fab { display: none; }
   .bb-ddown, .bb-ddown-panel { display: contents; }
   .bb-ddown-knopf { display: none; }
   html.bb-ohne-kopf .banner nav.container .bb-menu-plan { display: none !important; }
+}
+
+
+/* ---------- 22. Plan: Buchungen lesbar, Legende (theme.js) ----------------- */
+/* Tagesansicht: Uhrzeit und Plätze unter dem Namen */
+.dwm_main .booking > a { display: block; line-height: 1.3; }
+.dwm_main .booking .bb-buchung-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.4rem;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.bb-buchung-zeit { opacity: 0.8; font-weight: 600; }
+.bb-buchung-plaetze {
+  line-height: 1.5;
+  padding: 0 0.45em;
+  border-radius: 999px;
+  font-weight: 700;
+  background: var(--bb-mitsegeln-strong);
+  color: var(--bb-on-accent);
+}
+.booking.bb-kurs .bb-buchung-plaetze { background: var(--bb-kurs-strong); color: #fff; }
+.booking.full .bb-buchung-plaetze { background: var(--bb-muted); color: var(--bb-surface); }
+
+/* Woche aller Boote: Kärtchen statt Streifen (nur am Computer) */
+.bb-wk { display: none; }
+@media (min-width: 701px) and (pointer: fine) {
+  .all_rooms.bb-wochenkarten td > a { display: block !important; height: auto !important; min-height: 2.6rem; padding: 3px; }
+  .all_rooms.bb-wochenkarten td > a > div { display: none !important; }
+  .all_rooms.bb-wochenkarten .bb-wk { display: flex; flex-direction: column; gap: 3px; }
+  .bb-wk-chip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.35rem;
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-size: 0.74rem;
+    line-height: 1.3;
+    text-align: left;
+    color: var(--bb-on-type);
+    background: var(--bb-type-i);
+    box-shadow: inset 3px 0 0 var(--bb-streifen);
+  }
+  .bb-wk-chip.mitsegeln { background: var(--bb-surface); box-shadow: inset 0 0 0 1.5px var(--bb-mitsegeln-strong); }
+  .bb-wk-chip.kurs { background: var(--bb-kurs); box-shadow: inset 3px 0 0 var(--bb-kurs-strong); }
+  .bb-wk-chip.voll { background: var(--bb-invalid); box-shadow: inset 3px 0 0 var(--bb-muted); }
+  .bb-wk-zeit { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bb-wk-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 4rem; }
+  .bb-wk-plaetze { font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* Die Jetzt-Linie quer durch die Kärtchen stört, der heutige Tag ist ohnehin markiert */
+  .table_container:has(.bb-wochenkarten) .timeline { display: none; }
+}
+
+/* Legende unter dem Plan */
+.bb-legende {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.82rem;
+  color: var(--bb-muted);
+}
+.bb-legende > span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.bb-legende i { width: 1.1rem; height: 0.8rem; border-radius: 4px; background: var(--bb-type-i); box-shadow: inset 3px 0 0 var(--bb-streifen); }
+.bb-legende-mitsegeln i { background: var(--bb-surface); box-shadow: inset 0 0 0 2px var(--bb-mitsegeln-strong); }
+.bb-legende-kurs i { background: var(--bb-kurs); box-shadow: inset 3px 0 0 var(--bb-kurs-strong); }
+.bb-legende-voll i { background: var(--bb-invalid); box-shadow: inset 3px 0 0 var(--bb-muted); }
+@media (max-width: 700px) {
+  html:not(.bb-tagesraster) .bb-legende:has(+ .bb-tagesliste),
+  html:not(.bb-tagesraster) .table_container:has(#day_main) + .bb-legende { order: 2; }
+}
+/* Am Handy sind Mitsegel-Fahrten in der Woche kräftig grüne Streifen (13.) */
+@media (max-width: 700px), (pointer: coarse) {
+  .bb-legende-mitsegeln i { background: var(--bb-mitsegeln); box-shadow: none; }
 }

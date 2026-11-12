@@ -803,8 +803,9 @@
    Handy: Tagesplan als Liste
 
    Die Tabelle der Tagesansicht (ein Boot je Spalte) ist am Handy eng. Hier
-   wird daraus eine Karte je Boot mit seinen Buchungen und einem Knopf
-   „Buchen“. Ein Umschalter „Liste | Raster“ holt die Tabelle zurück, die
+   wird daraus eine Karte je Boot mit einer Zeitleiste über den Tag, seinen
+   Buchungen und den freien Zeiten als Knöpfe („Frei bis 14:00“, „Ab 16:00“),
+   die die Buchung gleich mit dieser Startzeit öffnen. Ein Umschalter „Liste | Raster“ holt die Tabelle zurück, die
    Wahl merkt sich der Browser. Gebaut wird aus der Tabelle selbst, deshalb
    gilt alles, was MRBS dort berechnet (Rechte, private Buchungen …).
    Sichtbar nur auf schmalen Bildschirmen (theme.css, 15.).
@@ -854,12 +855,16 @@
         frei: null
       });
     });
+    boote.beginn = null;   // erste und letzte Zeit des Tages (Sekunden ab 0 Uhr)
+    boote.ende = null;
     var belegt = [];   // je Spalte: bis zu welcher Zeile durch rowspan belegt
     var zeilen = table.querySelectorAll('tbody > tr');
     zeilen.forEach(function (tr, r) {
       var th = tr.querySelector('th[data-seconds]');
       if (!th) { return; }
       var start = parseInt(th.dataset.seconds, 10);
+      if (boote.beginn === null) { boote.beginn = start; }
+      boote.ende = start + aufloesung;
       var spalte = 0;
       Array.prototype.forEach.call(tr.children, function (td) {
         if (td.tagName !== 'TD') { return; }
@@ -871,13 +876,26 @@
           var link = td.querySelector('.booking a, a[href*="view_entry"]');
           var box = td.querySelector('.booking');
           if (link) {
-            var text = link.textContent.trim();
-            var platz = text.match(/\s*\[(\d+)(?:\/(\d+))?\]\s*$/);
+            // nur der Name: „Buchungen lesbar machen“ hängt Uhrzeit und Plätze an
+            var text = (link.firstChild && link.firstChild.nodeType === 3 && link.querySelector('.bb-buchung-info')
+                        ? link.firstChild.nodeValue : link.textContent).trim();
+            // Plätze am Ende: "[2/5]" (MRBS) oder " · 2/5" (deutsche Vorgabe)
+            var platz = text.match(/\s*(?:\[(\d+)(?:\/(\d+))?\]|·\s*(\d+)(?:\/(\d+))?)\s*$/);
+            var besetzt = platz ? (platz[1] || platz[3]) : null;
+            var max = platz ? (platz[2] || platz[4]) : null;
+            // schon von „Buchungen lesbar machen“ aufgeteilt?
+            var schild = box && box.querySelector('.bb-buchung-plaetze');
+            if (!platz && schild) {
+              var sp = schild.textContent.split('/');
+              besetzt = sp[0];
+              max = sp[1] || null;
+              platz = true;
+            }
             boot.buchungen.push({
               von: start,
               bis: start + span * aufloesung,
               name: platz ? text.slice(0, platz.index) : text,
-              plaetze: platz ? (platz[1] + (platz[2] ? ' / ' + platz[2] : '')) : '',
+              plaetze: platz ? (besetzt + (max ? ' / ' + max : '')) : '',
               href: link.getAttribute('href'),
               kurs: !!(box && box.classList.contains('bb-kurs')),
               mitsegeln: !!(box && (box.classList.contains('spaces') || box.classList.contains('full'))),
@@ -894,6 +912,84 @@
     return boote;
   }
 
+  // Angezeigter Tag ist heute? (aus den Links der Tabelle)
+  function istHeute(href) {
+    var j = /[?&]year=(\d+)/.exec(href || ''), m = /[?&]month=(\d+)/.exec(href || ''), t = /[?&]day=(\d+)/.exec(href || '');
+    if (!j || !m || !t) { return false; }
+    var h = new Date();
+    return +j[1] === h.getFullYear() && +m[1] === h.getMonth() + 1 && +t[1] === h.getDate();
+  }
+
+  function jetztSek() {
+    var h = new Date();
+    return h.getHours() * 3600 + h.getMinutes() * 60;
+  }
+
+  // Balken über den Tag: belegte Zeiten in den Farben der Buchungen, rote
+  // Linie für jetzt. Rein zur Übersicht (aria-hidden), die Zeiten stehen darunter.
+  function zeitleiste(karte, boot, boote) {
+    if (boote.beginn === null || boote.ende <= boote.beginn) { return; }
+    var spanne = boote.ende - boote.beginn;
+    var pos = function (sek) { return Math.max(0, Math.min(100, (sek - boote.beginn) / spanne * 100)); };
+    var leiste = el('div', 'bb-zeitleiste');
+    leiste.setAttribute('aria-hidden', 'true');
+    boot.buchungen.forEach(function (b) {
+      var s = el('span', b.kurs ? 'kurs' : (b.mitsegeln ? 'mitsegeln' : 'buchung'));
+      s.style.left = pos(b.von) + '%';
+      s.style.width = Math.max(1, pos(b.bis) - pos(b.von)) + '%';
+      leiste.appendChild(s);
+    });
+    if (istHeute(boot.frei || boot.woche) && jetztSek() > boote.beginn && jetztSek() < boote.ende) {
+      var j = el('i', 'jetzt');
+      j.style.left = pos(jetztSek()) + '%';
+      leiste.appendChild(j);
+    }
+    karte.appendChild(leiste);
+    var achse = el('div', 'bb-zeitachse');
+    achse.setAttribute('aria-hidden', 'true');
+    var schritte = 4;
+    for (var i = 0; i <= schritte; i++) {
+      var sek = boote.beginn + spanne * i / schritte;
+      achse.appendChild(el('span', null, String(i === schritte ? Math.floor(sek / 3600) : Math.round(sek / 3600))));
+    }
+    karte.appendChild(achse);
+  }
+
+  // Lücken zwischen den Buchungen (mindestens eine Stunde), am angezeigten
+  // Tag erst ab jetzt. Jede wird ein Knopf, der die Buchung mit dieser
+  // Startzeit öffnet.
+  function freieZeiten(boot, boote) {
+    if (!boot.frei || boote.beginn === null) { return []; }
+    var MIN = 3600;
+    var ab = boote.beginn;
+    if (istHeute(boot.frei)) {
+      var aufl = 1800;
+      ab = Math.max(ab, Math.ceil(jetztSek() / aufl) * aufl);
+    }
+    var belegt = boot.buchungen.slice().sort(function (x, y) { return x.von - y.von; });
+    var luecken = [];
+    var von = ab;
+    belegt.concat([{ von: boote.ende, bis: boote.ende }]).forEach(function (b) {
+      if (b.von - von >= MIN) { luecken.push([von, b.von]); }
+      von = Math.max(von, b.bis);
+    });
+    return luecken.map(function (l) {
+      var href = boot.frei.replace(/([?&]hour=)\d+/, '$1' + Math.floor(l[0] / 3600))
+                          .replace(/([?&]minute=)\d+/, '$1' + Math.floor((l[0] % 3600) / 60));
+      var text;
+      if (l[0] === ab && l[1] === boote.ende) {
+        text = l[0] === boote.beginn ? 'Ganzer Tag frei · buchen' : 'Frei ab ' + uhrzeit(l[0]) + ' · buchen';
+      } else if (l[1] === boote.ende) {
+        text = 'Ab ' + uhrzeit(l[0]);
+      } else if (l[0] === ab) {
+        text = 'Frei bis ' + uhrzeit(l[1]);
+      } else {
+        text = uhrzeit(l[0]) + '–' + uhrzeit(l[1]);
+      }
+      return { text: text, href: href };
+    });
+  }
+
   function bauen(table) {
     if (table.dataset.bbListe === '1') { return; }
     table.dataset.bbListe = '1';
@@ -902,7 +998,8 @@
     if (alt) { alt.remove(); }
 
     var liste = el('div', 'bb-tagesliste');
-    auslesen(table).forEach(function (boot) {
+    var boote = auslesen(table);
+    boote.forEach(function (boot) {
       var karte = el('section', 'bb-bootkarte');
       var kopf = el('header');
       var titel = el(boot.woche ? 'a' : 'span', 'bb-bootname', boot.name);
@@ -913,8 +1010,11 @@
       }
       karte.appendChild(kopf);
 
+      zeitleiste(karte, boot, boote);
+      var luecken = freieZeiten(boot, boote);
+
       if (!boot.buchungen.length) {
-        karte.appendChild(el('p', 'bb-frei', 'Den ganzen Tag frei'));
+        if (!luecken.length) { karte.appendChild(el('p', 'bb-frei', 'Den ganzen Tag frei')); }
       } else {
         var ul = el('ul');
         boot.buchungen.forEach(function (b) {
@@ -935,7 +1035,17 @@
         });
         karte.appendChild(ul);
       }
-      if (boot.frei) {
+      if (luecken.length) {
+        var frei = el('div', 'bb-luecken');
+        frei.setAttribute('aria-label', 'Freie Zeiten – antippen zum Buchen');
+        luecken.slice(0, 4).forEach(function (l) {
+          var chip = el('a', 'bb-luecke', l.text);
+          chip.href = l.href;
+          chip.setAttribute('aria-label', l.text + ' – ' + boot.name + ' buchen');
+          frei.appendChild(chip);
+        });
+        karte.appendChild(frei);
+      } else if (boot.frei) {
         var knopf = el('a', 'bb-buchen', '+ Buchen');
         knopf.href = boot.frei;
         karte.appendChild(knopf);
@@ -1671,6 +1781,152 @@
   } else {
     init();
   }
+})();
+
+
+/* =============================================================================
+   Plan: Buchungen lesbar machen
+
+   Tagesansicht (und Woche eines Bootes): In jeder Buchung steht unter dem
+   Namen die Uhrzeit, die Belegung („· 2/5“) wird ein eigenes Schild.
+   Woche aller Boote: Statt schmaler Streifen, in denen nur „Ja“ oder „Opt“
+   Platz hat, stehen die Buchungen eines Tages als Kärtchen mit Uhrzeit und
+   Name untereinander. Ein Klick auf den Tag öffnet ihn wie bisher.
+   Darunter eine Legende für Buchung, Mitsegeln, Kurs und voll.
+   Aussehen in theme.css, 22. (Kärtchen nur am Computer; am Handy bleiben
+   die Streifen bzw. die Liste aus „Tagesplan als Liste“).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  function zwei(n) { return (n < 10 ? '0' : '') + n; }
+  function uhr(sek) {
+    var h = Math.floor(sek / 3600) % 24, m = Math.floor((sek % 3600) / 60);
+    return zwei(h) + ':' + zwei(m);
+  }
+  function kurzUhr(d) {          // Date -> "16" oder "16:30"
+    return d.getHours() + (d.getMinutes() ? ':' + zwei(d.getMinutes()) : '');
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+  // "Tina · 2/5" -> { name: "Tina", plaetze: "2/5" }; auch MRBS-Form "[2/5]"
+  function teilen(text) {
+    var m = text.match(/\s*(?:\[(\d+)(?:\/(\d+))?\]|·\s*(\d+)(?:\/(\d+))?)\s*$/);
+    if (!m) { return { name: text.trim(), plaetze: '' }; }
+    var b = m[1] || m[3], x = m[2] || m[4];
+    return { name: text.slice(0, m.index).trim(), plaetze: b + (x ? '/' + x : '') };
+  }
+
+  // --- Tagesansicht: Uhrzeit und Plätze in den Buchungen -------------------
+  function tag(table) {
+    var aufloesung = parseInt(table.dataset.resolution, 10) || 1800;
+    var belegt = [];
+    table.querySelectorAll('tbody > tr').forEach(function (tr, r) {
+      var th = tr.querySelector('th[data-seconds]');
+      if (!th) { return; }
+      var start = parseInt(th.dataset.seconds, 10);
+      var spalte = 0;
+      Array.prototype.forEach.call(tr.children, function (td) {
+        if (td.tagName !== 'TD') { return; }
+        while (belegt[spalte] > r) { spalte++; }
+        var span = parseInt(td.getAttribute('rowspan'), 10) || 1;
+        belegt[spalte] = r + span;
+        spalte++;
+        var box = td.querySelector('.booking');
+        var a = box && box.querySelector(':scope > a');
+        if (!a || box.dataset.bbInfo === '1') { return; }
+        box.dataset.bbInfo = '1';
+        var t = teilen(a.textContent);
+        if (t.plaetze) { a.textContent = t.name; }
+        var info = el('span', 'bb-buchung-info');
+        info.appendChild(el('span', 'bb-buchung-zeit', uhr(start) + '–' + uhr(start + span * aufloesung)));
+        if (t.plaetze) { info.appendChild(el('span', 'bb-buchung-plaetze', t.plaetze)); }
+        // in den Link, denn der liegt bei MRBS über der ganzen Buchung
+        a.appendChild(info);
+      });
+    });
+  }
+
+  // --- Woche aller Boote: Kärtchen je Buchung ------------------------------
+  function woche(table) {
+    var slots;
+    try { slots = JSON.parse(table.querySelector('thead').dataset.slots)[0]; } catch (e) { return; }
+    if (!slots || !slots.length) { return; }
+    table.classList.add('bb-wochenkarten');
+    table.querySelectorAll('tbody > tr').forEach(function (tr) {
+      Array.prototype.filter.call(tr.children, function (c) { return c.tagName === 'TD'; }).forEach(function (td, i) {
+        var a = td.querySelector('a');
+        if (!a || a.querySelector('.bb-wk') || !slots[i]) { return; }
+        var teile = Array.prototype.filter.call(a.children, function (d) { return d.tagName === 'DIV'; });
+        var gesamt = 0;
+        teile.forEach(function (d) { gesamt += parseFloat(d.style.flexGrow) || 0; });
+        if (!gesamt) { return; }
+        var proSlot = (slots[i][1] - slots[i][0]) / gesamt;   // Sekunden je Einheit
+        var liste = el('span', 'bb-wk');
+        var pos = 0;
+        teile.forEach(function (d) {
+          var n = parseFloat(d.style.flexGrow) || 0;
+          if (!d.classList.contains('free') && d.textContent.trim()) {
+            var von = new Date((slots[i][0] + pos * proSlot) * 1000);
+            var bis = new Date((slots[i][0] + (pos + n) * proSlot) * 1000);
+            var t = teilen(d.textContent);
+            var art = d.classList.contains('bb-kurs') ? 'kurs'
+                    : (d.classList.contains('full') ? 'voll' : (d.classList.contains('spaces') ? 'mitsegeln' : 'buchung'));
+            var chip = el('span', 'bb-wk-chip ' + art);
+            chip.title = d.getAttribute('title') || d.textContent;
+            chip.appendChild(el('span', 'bb-wk-zeit', kurzUhr(von) + '–' + kurzUhr(bis)));
+            chip.appendChild(el('span', 'bb-wk-name', t.name));
+            if (t.plaetze) { chip.appendChild(el('span', 'bb-wk-plaetze', t.plaetze)); }
+            liste.appendChild(chip);
+          }
+          pos += n;
+        });
+        if (liste.children.length) { a.appendChild(liste); }
+      });
+    });
+  }
+
+  // --- Legende ---------------------------------------------------------------
+  function legende(container) {
+    if (!container || container.parentNode.querySelector('.bb-legende')) { return; }
+    var l = el('div', 'bb-legende');
+    l.setAttribute('aria-label', 'Legende');
+    [['buchung', 'Buchung'], ['mitsegeln', 'Mitsegler willkommen'], ['kurs', 'Kurs'], ['voll', 'voll']].forEach(function (x) {
+      var s = el('span', 'bb-legende-' + x[0]);
+      s.appendChild(el('i'));
+      s.appendChild(document.createTextNode(x[1]));
+      l.appendChild(s);
+    });
+    container.parentNode.insertBefore(l, container.nextSibling);
+  }
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () {
+      geplant = false;
+      var d = document.getElementById('day_main');
+      if (d) { tag(d); }
+      var w = document.querySelector('table.dwm_main.all_rooms');
+      if (w && w.id === 'week_main') { woche(w); }
+      var t = document.querySelector('.view_container .table_container');
+      if (t && (d || w)) { legende(t); }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pruefen);
+  } else {
+    pruefen();
+  }
+  var start = function () {
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
 })();
 
 
