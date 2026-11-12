@@ -2582,3 +2582,23 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
 .bb-belegung > i { display: block; height: 100%; border-radius: 999px; background: var(--bb-accent); }
 #bb-mitsegeln li.kurs .bb-belegung > i { background: var(--bb-kurs-strong); }
 #bb-mitsegeln li.bb-voll { opacity: 0.6; }
+
+
+/* ---------- 29. Verwaltung: Saisonstatistik (theme.js, statistik.php) ----- */
+.bb-statistik {
+  margin: 0 0 1.5rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+}
+.bb-statistik > summary { cursor: pointer; font-size: 1.1rem; font-weight: 700; }
+.bb-statistik[open] > summary { margin-bottom: 0.75rem; }
+.bb-statistik-leiste { margin-bottom: 0.5rem; }
+.bb-statistik-saison, .bb-statistik-hinweis { margin: 0.25rem 0 0.75rem; color: var(--bb-muted); font-size: 0.88rem; }
+.bb-statistik-huelle { overflow-x: auto; }
+.bb-statistik-tabelle { border-collapse: collapse; min-width: 100%; font-variant-numeric: tabular-nums; }
+.bb-statistik-tabelle th, .bb-statistik-tabelle td { padding: 0.4rem 0.7rem; border-bottom: 1px solid var(--bb-border-soft); text-align: right; white-space: nowrap; }
+.bb-statistik-tabelle th:first-child { text-align: left; }
+.bb-statistik-tabelle thead th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--bb-muted); }
+.bb-statistik-summe th, .bb-statistik-summe td { font-weight: 700; border-top: 2px solid var(--bb-border); }
