@@ -118,6 +118,27 @@ if ($user !== null)
 }
 
 $daten  = bb_hilfe_texte(__DIR__ . '/hilfe');
+
+// Platzhalter wie {buchungsregeln} aus den Einstellungen des Vereins füllen
+// (nur Deutsch; andere Sprachen haben allgemeine Sätze ohne Platzhalter)
+require_once __DIR__ . '/regeln.inc';
+$platzhalter = [];
+try
+{
+  $platzhalter = bb_regeln_platzhalter();
+}
+catch (\Throwable $e)
+{
+}
+if ($platzhalter)
+{
+  array_walk_recursive($daten, function (&$wert) use ($platzhalter) {
+    if (is_string($wert) && strpos($wert, '{') !== false)
+    {
+      $wert = strtr($wert, $platzhalter);
+    }
+  });
+}
 $texte  = $daten['texte'] ?? [];
 $seiten = $daten['seiten'] ?? [];
 
