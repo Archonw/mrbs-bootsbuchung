@@ -6,6 +6,18 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Push-Erinnerung vor der Fahrt
+
+- **Erinnerung:** Etwa zwei Stunden vor Beginn bekommen alle, die gebucht
+  haben oder angemeldet sind, eine Push-Nachricht – „In 2 Stunden: Pirat“,
+  „10:00–12:00 · Wind SW 3 Bft, Böen 5“. Nur Push, keine Mail.
+- Die Wettervorhersage steckt jetzt in `theme/verein/wetter.inc` und wird von
+  `wetter.php` und der Erinnerung gemeinsam benutzt.
+
+Für bestehende Installationen ist nichts von Hand zu tun: `update.sh` trägt
+den Cron-Job (alle 15 Minuten) in `/etc/cron.d/bootsbuchung` ein. Probelauf:
+`sudo /opt/bootsbuchung/maintenance/fahrt-erinnerung.sh --probe`
+
 ## 2026-11-12 – Lieblingsboote, Bootsklassen, Belegung als Balken
 
 - **Lieblingsboote:** Ein Stern in jeder Bootskarte am Handy merkt das Boot

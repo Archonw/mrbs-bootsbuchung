@@ -177,5 +177,11 @@ PHP
   fi
 fi
 
+# Push-Erinnerung vor der Fahrt (seit November 2026): Cron-Zeile nachtragen
+if [ -f /etc/cron.d/bootsbuchung ] && ! grep -q 'fahrt-erinnerung' /etc/cron.d/bootsbuchung && [ -w /etc/cron.d/bootsbuchung ]; then
+  echo "*/15 * * * * root $DIR/maintenance/fahrt-erinnerung.sh >> /var/log/bootsbuchung.log 2>&1" >> /etc/cron.d/bootsbuchung
+  echo "==> Push-Erinnerung vor der Fahrt eingerichtet (alle 15 Minuten)"
+fi
+
 echo "==> Fertig: MRBS $VERSION läuft (PHP $(docker exec mrbs php -r 'echo PHP_VERSION;' 2>/dev/null || echo unbekannt))."
 echo "    Zurück zur vorigen Version:  docker image tag bootsbuchung-mrbs:vorher bootsbuchung-mrbs:latest && docker compose up -d"
