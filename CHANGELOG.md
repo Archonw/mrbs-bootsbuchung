@@ -6,6 +6,18 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Handy: Tag als Start, Wochenstreifen, Wischen
+
+- **Start am Handy:** Ist am Computer die Woche oder der Monat die
+  Startansicht, öffnet der Plan am Handy trotzdem den Tag – dort sind die
+  Bootskarten lesbar. Woche und Monat bleiben einen Tipp entfernt.
+- **Wochenstreifen** über den Bootskarten: die sieben Tage der Woche zum
+  Antippen, heute grün, nicht buchbare Tage blass.
+- **Wischen** nach links oder rechts blättert einen Tag weiter oder zurück.
+- Wind in der Wochenansicht stand doppelt im Kopf, jetzt einmal.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Wind und Wetter
 
 - **Vorhersage** für das Revier im Plan (Tag: unter dem Datum, Woche: im
