@@ -57,6 +57,10 @@ The user interface is German.*
 - Alle kommenden Kurse und Mitsegelgelegenheiten mit freien Plätzen
 - Filter „Meine“: eigene Buchungen und Anmeldungen auf einen Blick
 
+**Wind und Wetter** (optional)
+- Vorhersage für das Revier im Plan und im Buchungsformular, Windwarnung
+  (siehe [Wind und Wetter](#wind-und-wetter))
+
 **Bootsübersicht für Mitglieder**
 - Menüpunkt „Boote“: alle Boote als Kacheln, pro Boot eine Seite mit
   Titelbild, Bootsdaten (Länge, Breite, Tiefgang, Masthöhe, Gewicht),
@@ -281,6 +285,25 @@ für Stunden und Kosten je Boot und Download als CSV (für Excel).
 **Rolle Bootswartung:** Haken beim Benutzer, den nur Admins setzen dürfen
 (`bootswartung` steht in `$auth['db']['protected_fields']`; bei älteren
 Installationen ergänzt `update.sh` das).
+
+## Wind und Wetter
+
+Der Plan kann die Wettervorhersage für das Revier zeigen: Wind in Beaufort,
+Böen, Richtung, Temperatur und Sonnenuntergang. In der Tagesansicht unter dem
+Datum, in der Woche im Kopf jedes Tages, im Buchungsformular für die gewählte
+Zeit (mit Warnung ab Böen 6 Bft). Farben: bis 4 Bft grün, 5 orange, ab 6 rot.
+
+Einschalten mit einer Zeile in der `config.inc.php` (Koordinaten des Reviers,
+z. B. aus OpenStreetMap: Rechtsklick → „Adresse anzeigen“):
+
+```php
+$bb_wetter = ['breite' => 51.745, 'laenge' => 7.215, 'ort' => 'Halterner Stausee'];
+```
+
+Die Vorhersage kommt von [Open-Meteo](https://open-meteo.com) (kostenlos,
+ohne Konto). Der Server fragt höchstens einmal pro Stunde an, die Browser der
+Mitglieder fragen nur den eigenen Server – es gehen keine Daten der Mitglieder
+nach außen.
 
 ## Hilfe und Sprachen
 

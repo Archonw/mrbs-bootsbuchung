@@ -2406,3 +2406,39 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
   list-style-position: inside;
 }
 .bb-meldung[open] > summary { margin-bottom: 0.5rem; }
+
+
+/* ---------- 24. Wind und Wetter (theme.js, wetter.php) --------------------- */
+.bb-wetter {
+  margin: -0.5rem auto 0.9rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.25rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  box-shadow: inset 0 0 0 1px var(--bb-border);
+}
+.bb-wetter strong { font-weight: 700; }
+.bb-wind-ruhig strong, .bb-wind.bb-wind-ruhig { color: var(--bb-accent); }
+.bb-wind-frisch strong, .bb-wind.bb-wind-frisch { color: var(--bb-warning); }
+.bb-wind-stark strong, .bb-wind.bb-wind-stark { color: var(--bb-danger); }
+.bb-wetter.bb-wind-frisch { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bb-warning) 50%, transparent); }
+.bb-wetter.bb-wind-stark { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bb-danger) 50%, transparent); }
+.bb-wind {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* im Formular unter der Uhrzeit, linksbündig */
+.bb-wetter-formular { margin: 0.5rem 0 0; text-align: left; border-radius: 10px; flex-basis: 100%; }
+.bb-wetter-formular.bb-wind-frisch { color: var(--bb-warning); }
+.bb-wetter-formular.bb-wind-stark { color: var(--bb-danger); font-weight: 600; }
+@media (max-width: 700px) {
+  .start_end > div > .bb-wetter-formular { grid-column: 1 / -1; }
+}
