@@ -47,6 +47,9 @@ The user interface is German.*
   Mitglieder tragen sich in die Buchung ein
 - Die Platzzahl ist an die Bootsgröße gebunden (der Schiffsführer zählt mit)
 - Bestätigungsmail bei An- und Abmeldung, Info an den Schiffsführer
+- **Warteliste:** Ist eine Fahrt oder ein Kurs voll, trägt man sich auf die
+  Warteliste ein. Sagt jemand ab, rückt der Erste automatisch nach und bekommt
+  die normale Bestätigung
 
 **Kurse**
 - Rolle **Segellehrer** (vom Admin vergeben) – nur Segellehrer können Kurse anbieten

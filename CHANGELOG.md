@@ -6,6 +6,18 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Warteliste für volle Fahrten und Kurse
+
+- **Warteliste:** Ist eine Fahrt mit „Mitsegler willkommen“ oder ein Kurs
+  voll, steht in der Buchung „Auf die Warteliste“. Sagt jemand ab, rückt der
+  Erste automatisch nach und bekommt dieselbe Bestätigung (Mail bzw. Push)
+  wie bei einer normalen Anmeldung. Das gilt auch, wenn der Schiffsführer
+  die Platzzahl erhöht. Schiffsführer/Segellehrer und Admins sehen, wer auf
+  der Liste steht.
+
+Für bestehende Installationen ist nichts von Hand zu tun: `update.sh` spielt
+`warteliste.patch` und `sql/warteliste.sql` ein.
+
 ## 2026-11-12 – Saisonstatistik in der Verwaltung
 
 - **Saisonstatistik** (nur Admins, oben unter Verwaltung zum Aufklappen): je

@@ -2965,6 +2965,83 @@
 
 
 /* =============================================================================
+   Buchung ansehen: Warteliste
+
+   Ist eine Fahrt oder ein Kurs voll, steht unter den Anmeldungen der Knopf
+   „Auf die Warteliste“ bzw. „Du stehst auf Platz 2 der Warteliste“. Sagt
+   jemand ab, rückt der Erste automatisch nach und bekommt die normale
+   Anmeldebestätigung (warteliste.patch). Schiffsführer/Segellehrer und
+   Admins sehen, wer auf der Liste steht. Daten: Themes/verein/warteliste.php.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+
+  function absenden(aktion, id, name) {
+    var token = document.querySelector('input[name="csrf_token"]');
+    var f = document.createElement('form');
+    f.method = 'post';
+    f.action = 'registration_handler.php';
+    [['action', aktion], ['event_id', id], ['username', name], ['returl', location.pathname.replace(/^.*\//, '') + location.search],
+     ['csrf_token', token ? token.value : '']].forEach(function (x) {
+      var i = document.createElement('input');
+      i.type = 'hidden';
+      i.name = x[0];
+      i.value = x[1];
+      f.appendChild(i);
+    });
+    document.body.appendChild(f);
+    f.submit();
+  }
+
+  function init() {
+    if (!/view_entry\.php/.test(location.pathname)) { return; }
+    var id = (/[?&]id=(\d+)/.exec(location.search) || [])[1];
+    var reg = document.getElementById('registration');
+    if (!id || !reg || reg.querySelector('.bb-warteliste')) { return; }
+    fetch('Themes/verein/warteliste.php?id=' + id, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (w) {
+        if (!w || !w.aktiv) { return; }
+        var box = el('div', 'bb-warteliste');
+        if (w.voll && !w.angemeldet && !w.schiffsfuehrer) {
+          if (w.platz) {
+            box.appendChild(el('p', null, 'Du stehst auf Platz ' + w.platz + ' der Warteliste. Sagt jemand ab, rückst du automatisch nach und bekommst eine Nachricht.'));
+            var raus = el('button', 'bb-warteliste-raus', 'Von der Warteliste nehmen');
+            raus.type = 'button';
+            raus.addEventListener('click', function () { absenden('warteliste_raus', id, w.ich); });
+            box.appendChild(raus);
+          } else {
+            box.appendChild(el('p', null, 'Alle Plätze sind belegt.' + (w.anzahl ? ' Auf der Warteliste ' + (w.anzahl === 1 ? 'steht schon 1 Person' : 'stehen schon ' + w.anzahl + ' Personen') + '.' : '') +
+                                          ' Sagt jemand ab, rückt der Erste auf der Warteliste automatisch nach.'));
+            var rein = el('button', 'bb-warteliste-rein', 'Auf die Warteliste');
+            rein.type = 'button';
+            rein.addEventListener('click', function () { absenden('warteliste', id, w.ich); });
+            box.appendChild(rein);
+          }
+        }
+        if (w.leitung && w.anzahl) {
+          box.appendChild(el('p', 'bb-warteliste-namen', 'Warteliste: ' + w.namen.join(', ')));
+        }
+        if (box.children.length) { reg.appendChild(box); }
+      })
+      .catch(function () {});
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+
+/* =============================================================================
    Plan: bis wann gebucht werden kann
 
    Unter dem Datum steht, bis zu welchem Tag gerade gebucht werden kann, und

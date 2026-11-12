@@ -2602,3 +2602,18 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
 .bb-statistik-tabelle th:first-child { text-align: left; }
 .bb-statistik-tabelle thead th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--bb-muted); }
 .bb-statistik-summe th, .bb-statistik-summe td { font-weight: 700; border-top: 2px solid var(--bb-border); }
+
+
+/* ---------- 30. Warteliste (theme.js, warteliste.php) ---------------------- */
+.bb-warteliste {
+  max-width: 34rem;
+  margin: 0.75rem 0;
+  padding: 0.8rem 1rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint);
+}
+.bb-warteliste p { margin: 0 0 0.6rem; }
+.bb-warteliste p:last-child { margin-bottom: 0; }
+.contents .bb-warteliste .bb-warteliste-rein { background: var(--bb-accent) !important; border-color: var(--bb-accent) !important; color: var(--bb-on-accent) !important; }
+.bb-warteliste-namen { font-size: 0.9rem; font-weight: 600; }
