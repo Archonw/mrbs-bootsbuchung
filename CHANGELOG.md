@@ -6,6 +6,23 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Buchungsformular schneller ausfüllen
+
+- Abschnitte **Wann?**, **Welches Boot?**, **Mitsegler und Kurs**.
+- Der **Schiffsführer** ist bei einer neuen Buchung mit dem eigenen Namen
+  vorbelegt.
+- Unter „Ende“ Knöpfe für die **Dauer** (1 bis 4 Stunden).
+- **Boote als Kacheln** mit Platzzahl statt Mehrfach-Liste. Ein Klick wählt
+  das Boot, mit Strg/Cmd mehrere.
+- **„Gibt es etwas zu melden?“** ist zugeklappt („Etwas am Boot kaputt oder
+  fehlt etwas?“) und steht nach den Mitseglern; mit Text ist es offen.
+- Der Knopf sagt, was passiert: **„Pirat buchen“** statt „Speichern“ (bei
+  neuen Buchungen).
+- Die Prüfung steht jetzt auch am Computer als Satz über den Knöpfen, grün
+  „Das Boot ist frei …“ oder rot mit dem Problem, statt zweier kleiner Haken.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Plan: freie Zeiten und lesbare Buchungen
 
 - **Handy, Tagesplan:** Jede Bootskarte hat eine Zeitleiste über den Tag
