@@ -6,6 +6,19 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Lieblingsboote, Bootsklassen, Belegung als Balken
+
+- **Lieblingsboote:** Ein Stern in jeder Bootskarte am Handy merkt das Boot
+  (pro Gerät); Lieblinge stehen oben.
+- **Bootsklassen:** Boote derselben Klasse, die im Plan nebeneinander stehen
+  („Optimist - Ente“, „Optimist - Winner“), erscheinen am Handy in einer
+  gemeinsamen Karte „Optimist · 2 Boote“. Es zählt der Teil vor „ - “ im
+  Bootsnamen, die Reihenfolge kommt aus dem Sortierschlüssel.
+- **Mitsegeln & Kurse:** Unter „2 / 5“ zeigt ein Balken, wie voll die Fahrt
+  ist; volle Fahrten sind blass.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Boot sperren, Schäden im Plan
 
 - **Boot sperren:** Unter Verwaltung → Boot bearbeiten gibt es „Gesperrt bis

@@ -849,6 +849,7 @@
       var a = th.querySelector('a');
       var kap = th.querySelector('.capacity');
       boote.push({
+        raum: th.dataset.room,
         name: (a ? a.childNodes[0].textContent : th.textContent).trim(),
         kapazitaet: kap ? kap.textContent.trim() : '',
         woche: a ? a.getAttribute('href') : null,
@@ -1002,6 +1003,7 @@
     var boote = auslesen(table);
     boote.forEach(function (boot) {
       var karte = el('section', 'bb-bootkarte');
+      karte.dataset.room = boot.raum || '';
       var kopf = el('header');
       var titel = el(boot.woche ? 'a' : 'span', 'bb-bootname', boot.name);
       if (boot.woche) { titel.href = boot.woche; }
@@ -2616,10 +2618,9 @@
       (th.querySelector('a') || th).appendChild(schild(s, true));
       if (s.gesperrt_bis && s.gesperrt_bis >= tag) { th.classList.add('bb-gesperrt'); }
     });
-    // Handy: Bootskarten (Reihenfolge wie die Spalten der Tabelle)
-    var raeume = Array.prototype.map.call(document.querySelectorAll('#day_main thead th[data-room]'), function (th) { return th.dataset.room; });
-    document.querySelectorAll('.bb-tagesliste .bb-bootkarte').forEach(function (karte, i) {
-      var s = st[raeume[i]];
+    // Handy: Bootskarten (data-room aus „Tagesplan als Liste“)
+    document.querySelectorAll('.bb-tagesliste .bb-bootkarte').forEach(function (karte) {
+      var s = st[karte.dataset.room];
       if (!aktiv(s) || karte.querySelector('.bb-status')) { return; }
       var kopf = karte.querySelector('header');
       kopf.insertBefore(schild(s, false), kopf.querySelector('.bb-kapazitaet'));
@@ -2673,6 +2674,168 @@
     new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
   };
   if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
+   Handy: Lieblingsboote und Bootsklassen in den Bootskarten
+
+   - Ein Stern in jeder Bootskarte merkt das Boot als Liebling (pro Browser);
+     Lieblinge stehen oben.
+   - Boote derselben Klasse („Optimist - Ente“, „Optimist - Winner“), die im
+     Plan nebeneinander stehen, kommen in eine gemeinsame Karte „Optimist ·
+     2 Boote“ – wer „einen Opti“ sucht, sieht sofort, welcher frei ist.
+   Läuft nach „Tagesplan als Liste“ und „Bootsstatus“ (theme.css, 28.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var KEY = 'bb-lieblingsboote';
+  var STERN = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"></path></svg>';
+
+  function lieblinge() {
+    try { return JSON.parse(window.localStorage.getItem(KEY) || '[]'); } catch (e) { return []; }
+  }
+  function speichern(l) {
+    try { window.localStorage.setItem(KEY, JSON.stringify(l)); } catch (e) { /* egal */ }
+  }
+  // "Optimist - Ente" -> ["Optimist", "Ente"]; sonst null
+  function klasse(name) {
+    var m = /^(.+?)\s+[-–·]\s+(.+)$/.exec(name);
+    return m ? [m[1].trim(), m[2].trim()] : null;
+  }
+
+  function ordnen(liste) {
+    var l = lieblinge();
+    var karten = Array.prototype.slice.call(liste.querySelectorAll(':scope > .bb-bootkarte, :scope > .bb-bootgruppe'));
+    karten.forEach(function (k, i) { if (!k.dataset.pos) { k.dataset.pos = i; } });
+    karten.sort(function (a, b) {
+      var fa = a.querySelector('.bb-stern[aria-pressed="true"]') ? 0 : 1;
+      var fb = b.querySelector('.bb-stern[aria-pressed="true"]') ? 0 : 1;
+      return (fa - fb) || (a.dataset.pos - b.dataset.pos);
+    });
+    karten.forEach(function (k) { liste.appendChild(k); });
+    return l;
+  }
+
+  function einrichten(liste) {
+    if (liste.dataset.bbGruppen === '1') { return; }
+    var karten = Array.prototype.slice.call(liste.querySelectorAll(':scope > .bb-bootkarte'));
+    if (!karten.length) { return; }
+    liste.dataset.bbGruppen = '1';
+    var l = lieblinge();
+
+    // Stern je Karte
+    karten.forEach(function (karte) {
+      var name = (karte.querySelector('.bb-bootname') || {}).textContent || '';
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'bb-stern';
+      b.innerHTML = STERN;
+      b.setAttribute('aria-label', name + ' als Lieblingsboot merken');
+      b.setAttribute('aria-pressed', l.indexOf(name) >= 0 ? 'true' : 'false');
+      b.addEventListener('click', function () {
+        var jetzt = lieblinge();
+        var i = jetzt.indexOf(name);
+        if (i >= 0) { jetzt.splice(i, 1); } else { jetzt.push(name); }
+        speichern(jetzt);
+        b.setAttribute('aria-pressed', i >= 0 ? 'false' : 'true');
+        ordnen(liste);
+      });
+      karte.querySelector('header').appendChild(b);
+    });
+
+    // Gleiche Klasse nebeneinander -> Gruppe
+    var i = 0;
+    while (i < karten.length) {
+      var k = klasse((karten[i].querySelector('.bb-bootname') || {}).textContent || '');
+      var j = i + 1;
+      while (k && j < karten.length) {
+        var k2 = klasse((karten[j].querySelector('.bb-bootname') || {}).textContent || '');
+        if (!k2 || k2[0] !== k[0]) { break; }
+        j++;
+      }
+      if (k && j - i >= 2) {
+        var gruppe = document.createElement('section');
+        gruppe.className = 'bb-bootgruppe';
+        var kopf = document.createElement('header');
+        var titel = document.createElement('span');
+        titel.className = 'bb-gruppenname';
+        titel.textContent = k[0];
+        var info = document.createElement('span');
+        info.className = 'bb-gruppeninfo';
+        var frei = karten.slice(i, j).filter(function (c) { return c.querySelector('.bb-luecke'); }).length;
+        info.textContent = (j - i) + ' Boote' + (frei ? ' · ' + frei + ' mit freien Zeiten' : '');
+        kopf.appendChild(titel);
+        kopf.appendChild(info);
+        gruppe.appendChild(kopf);
+        liste.insertBefore(gruppe, karten[i]);
+        karten.slice(i, j).forEach(function (c) {
+          var n = c.querySelector('.bb-bootname');
+          var teile = klasse(n.textContent);
+          if (teile) { n.textContent = teile[1]; n.title = teile[0] + ' ' + teile[1]; }
+          gruppe.appendChild(c);
+        });
+        // Stern der Gruppe = Stern ihrer Boote
+        gruppe.querySelectorAll('.bb-stern').forEach(function (s) {
+          s.addEventListener('click', function () { ordnen(liste); });
+        });
+      }
+      i = j;
+    }
+    ordnen(liste);
+  }
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () {
+      geplant = false;
+      var liste = document.querySelector('.bb-tagesliste');
+      if (liste) { einrichten(liste); }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pruefen);
+  } else {
+    pruefen();
+  }
+  var start = function () {
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
+   Mitsegeln & Kurse: Belegung als Balken
+
+   Unter „0 / 5“ ein schmaler Balken, wie voll die Fahrt ist; volle Fahrten
+   werden blass (theme.css, 28.).
+   ============================================================================= */
+(function () {
+  'use strict';
+  function init() {
+    document.querySelectorAll('#bb-mitsegeln li.bb-fahrt .plaetze').forEach(function (p) {
+      if (p.querySelector('.bb-belegung')) { return; }
+      var m = /(\d+)\s*\/\s*(\d+)/.exec(p.textContent);
+      if (!m || +m[2] === 0) { return; }
+      var balken = document.createElement('span');
+      balken.className = 'bb-belegung';
+      balken.setAttribute('aria-hidden', 'true');
+      var fuell = document.createElement('i');
+      fuell.style.width = Math.min(100, Math.round(+m[1] / +m[2] * 100)) + '%';
+      balken.appendChild(fuell);
+      p.appendChild(balken);
+      if (+m[1] >= +m[2]) { p.closest('li').classList.add('bb-voll'); }
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
 
 
