@@ -1,0 +1,104 @@
+diff --git a/web/bb_sperre.inc b/web/bb_sperre.inc
+new file mode 100644
+index 0000000..21e4bc0
+--- /dev/null
++++ b/web/bb_sperre.inc
+@@ -0,0 +1,75 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung (sperre.patch): Boot vorübergehend sperren
++//
++// Zwei Felder beim Boot (sql/sperre.sql), gepflegt unter Verwaltung → Boot
++// bearbeiten:
++//   gesperrt_bis    letzter Tag der Sperre, JJJJ-MM-TT oder TT.MM.JJJJ (leer = nicht gesperrt)
++//   gesperrt_grund  kurzer Text, z. B. „Mast gebrochen, Reparatur läuft“
++// Buchungen, die vor dem Ende der Sperre beginnen, lehnt mrbsCheckPolicy() ab
++// (Admins bekommen nur einen Hinweis). Plan und Formular zeigen die Sperre an
++// (Theme, bootsstatus.php).
++// =============================================================================
++
++// Sperre eines Bootes, falls sie noch gilt: ['bis' => 'Y-m-d', 'grund' => '…']
++function bb_sperre(int $room_id) : ?array
++{
++  static $cache = [];
++  if (array_key_exists($room_id, $cache))
++  {
++    return $cache[$room_id];
++  }
++  $cache[$room_id] = null;
++  try
++  {
++    $row = db()->query("SELECT gesperrt_bis, gesperrt_grund FROM " . _tbl('room') . " WHERE id=? LIMIT 1", [$room_id])
++                ->next_row_keyed();
++  }
++  catch (\Throwable $e)
++  {
++    return null;   // Spalten fehlen: sql/sperre.sql noch nicht eingespielt
++  }
++  $bis = bb_sperre_datum((string) ($row['gesperrt_bis'] ?? ''));
++  if ($row && isset($bis) && $bis >= date('Y-m-d'))
++  {
++    $cache[$room_id] = ['bis' => $bis, 'grund' => trim((string) ($row['gesperrt_grund'] ?? ''))];
++  }
++  return $cache[$room_id];
++}
++
++
++// "2026-11-20" oder "20.11.2026" -> "2026-11-20", sonst null
++function bb_sperre_datum(string $text) : ?string
++{
++  $text = trim($text);
++  if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $text, $m) && checkdate((int) $m[2], (int) $m[3], (int) $m[1]))
++  {
++    return $text;
++  }
++  if (preg_match('/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/', $text, $m) && checkdate((int) $m[2], (int) $m[1], (int) $m[3]))
++  {
++    return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
++  }
++  return null;
++}
++
++
++// Text für die Regelverletzung, oder null
++function bb_sperre_verletzung(array $booking) : ?string
++{
++  $sperre = bb_sperre((int) $booking['room_id']);
++  if (!isset($sperre))
++  {
++    return null;
++  }
++  $ende = \DateTimeImmutable::createFromFormat('!Y-m-d', $sperre['bis']);
++  if ($ende === false || $booking['start_time'] >= $ende->modify('+1 day')->getTimestamp())
++  {
++    return null;
++  }
++  return 'Das Boot ist bis einschließlich ' . $ende->format('d.m.Y') . ' gesperrt' .
++         ($sperre['grund'] !== '' ? ': ' . $sperre['grund'] : '') . '.';
++}
+diff --git a/web/mrbs_sql.inc b/web/mrbs_sql.inc
+index f1b5db4..a6a80ca 100644
+--- a/web/mrbs_sql.inc
++++ b/web/mrbs_sql.inc
+@@ -671,6 +671,18 @@ function mrbsCheckPolicy(array $booking, ?int $ignore_entry_id=null, ?int $ignor
+     }
+   }
+ 
++  // Bootsbuchung-Anpassung (sperre.patch): gesperrte Boote (Verwaltung → Boot
++  // bearbeiten → „Gesperrt bis“). Für Admins nur ein Hinweis, wie bei allen Regeln.
++  if (!$delete)
++  {
++    require_once 'bb_sperre.inc';
++    $bb_sperre = bb_sperre_verletzung($booking);
++    if (isset($bb_sperre))
++    {
++      $violations[] = $bb_sperre;
++    }
++  }
++
+   // Check min_booking_date
+   if ($min_booking_date_enabled && !$delete)
+   {

@@ -2518,3 +2518,24 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
   text-decoration: none !important;
 }
 .bb-kalender-abo .bb-kalender-hinweis { font-size: 0.8rem; margin: 0; }
+
+
+/* ---------- 27. Bootsstatus: gesperrt, Schaden gemeldet (theme.js) -------- */
+.bb-status {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0 0.45em;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.6;
+  vertical-align: 0.1em;
+  white-space: nowrap;
+}
+.bb-status-gesperrt { background: var(--bb-danger); color: #fff; }
+.bb-status-schaden { background: color-mix(in srgb, var(--bb-warning) 18%, var(--bb-surface)); color: var(--bb-warning); }
+.dwm_main th.bb-gesperrt { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--bb-danger) 12%, transparent) 0 6px, transparent 6px 12px); }
+.bb-bootkachel .bb-status { margin: 0.2rem 0 0; }
+.bb-bootkarte.bb-gesperrt .bb-zeitleiste { opacity: 0.4; }
+.bb-gesperrt-hinweis { margin: 0.55rem 0 0; color: var(--bb-danger); font-weight: 600; font-size: 0.9rem; }
+.bb-bootkarte > header .bb-status { margin-left: 0; }
