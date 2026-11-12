@@ -1819,6 +1819,7 @@
   'use strict';
 
   var REIHENFOLGE = [
+    [/^index\.php$/, 5],
     [/bb_mitsegeln\.php/, 10],
     [/bb_boote\.php/, 20],
     [/report\.php/, 30],
@@ -1854,8 +1855,11 @@
     if (sortiert.every(function (a, i) { return a === links[i]; })) {
       return;
     }
-    // Der Knopf Hell/Dunkel bleibt hinter den Links
-    var vor = menu.querySelector('.bb-theme-toggle');
+    // Der Knopf Hell/Dunkel und die Menüs (Kopfzeile am Computer, unten)
+    // bleiben hinter den Links
+    var vor = Array.prototype.find.call(menu.children, function (el) {
+      return el.matches('.bb-theme-toggle, .bb-ddown');
+    }) || null;
     sortiert.forEach(function (a) { menu.insertBefore(a, vor); });
   }
 
@@ -1866,6 +1870,159 @@
   }
   var start = function () {
     new MutationObserver(ordnen).observe(document.body, { childList: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
+   Kopfzeile am Computer: eine Zeile statt zwei
+
+   Vorne, was Mitglieder ständig brauchen (Plan, Mitsegeln & Kurse, Boote,
+   Hilfe), die aktuelle Seite hervorgehoben. Die Punkte für Admins (Bericht,
+   Verwaltung, Importieren) kommen in ein Menü „Verwaltung“, alles rund ums
+   eigene Konto (Meine Buchungen, Benachrichtigungen, Benutzerliste,
+   Hell/Dunkel, Abmelden) in ein Menü mit dem eigenen Namen. Das Datumsfeld
+   springt schon von sich aus zum gewählten Tag (MRBS), der Knopf „Start“
+   ist überflüssig und wird ausgeblendet (theme.css).
+
+   Am Handy bleibt alles im Blatt „Mehr“ untereinander (theme.css, 21.):
+   die Menüs sind dort einfach aufgeklappt.
+   Läuft nach „Menü der Kopfzeile ordnen“ (deshalb am Ende der Datei).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var PFEIL = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+              'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>';
+
+  function zu(ausser) {
+    document.querySelectorAll('.bb-ddown.offen').forEach(function (d) {
+      if (d !== ausser) {
+        d.classList.remove('offen');
+        var b = d.querySelector('.bb-ddown-knopf');
+        if (b) { b.setAttribute('aria-expanded', 'false'); }
+      }
+    });
+  }
+
+  function menu(klasse, titel, inhalt) {
+    var d = document.createElement('div');
+    d.className = 'bb-ddown ' + klasse;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'bb-ddown-knopf';
+    b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-haspopup', 'true');
+    b.innerHTML = '<span></span>' + PFEIL;
+    b.firstChild.textContent = titel;
+    var p = document.createElement('div');
+    p.className = 'bb-ddown-panel';
+    p.id = 'bb-ddown-' + klasse;
+    b.setAttribute('aria-controls', p.id);
+    var k = document.createElement('p');
+    k.className = 'bb-ddown-titel';
+    k.textContent = titel;
+    p.appendChild(k);
+    inhalt.forEach(function (el) { if (el) { p.appendChild(el); } });
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var auf = !d.classList.contains('offen');
+      zu(d);
+      d.classList.toggle('offen', auf);
+      b.setAttribute('aria-expanded', auf ? 'true' : 'false');
+    });
+    d.appendChild(b);
+    d.appendChild(p);
+    return d;
+  }
+
+  function link(menuNav, muster) {
+    return Array.prototype.find.call(menuNav.querySelectorAll('a'), function (a) {
+      return muster.test(a.getAttribute('href') || '');
+    }) || null;
+  }
+
+  function seite() {
+    var p = location.pathname;
+    if (/bb_mitsegeln\.php/.test(p)) { return 'mitsegeln'; }
+    if (/bb_boote\.php|bb_wartung/.test(p)) { return 'boote'; }
+    if (/(^|\/)(index\.php)?$/.test(p) || /index\.php|view_entry\.php|edit_entry\.php/.test(p)) { return 'plan'; }
+    return '';
+  }
+
+  function umbauen() {
+    var banner = document.querySelector('header.banner:not(.simple)');
+    var menuNav = banner && banner.querySelector('nav.menu');
+    if (!menuNav || banner.dataset.bbKopf === '1') { return; }
+    banner.dataset.bbKopf = '1';
+    banner.classList.add('bb-kopf');
+
+    // Plan als erster Punkt (am Handy steht er unten in der App-Leiste)
+    if (!menuNav.querySelector('.bb-menu-plan')) {
+      var plan = document.createElement('a');
+      plan.className = 'bb-menu-plan';
+      plan.href = 'index.php';
+      plan.textContent = 'Plan';
+      menuNav.insertBefore(plan, menuNav.firstChild);
+    }
+    var aktiv = { plan: menuNav.querySelector('.bb-menu-plan'),
+                  mitsegeln: menuNav.querySelector('.bb-menu-mitsegeln'),
+                  boote: menuNav.querySelector('.bb-menu-boote') }[seite()];
+    if (aktiv) { aktiv.setAttribute('aria-current', 'page'); }
+
+    // Menü „Verwaltung“: nur, wer die Verwaltung sehen darf (Admins)
+    var verwaltung = link(menuNav, /(^|\/)admin\.php/);
+    if (verwaltung) {
+      var bericht = link(menuNav, /(^|\/)report\.php/);
+      var importieren = link(menuNav, /(^|\/)import\.php/);
+      var m = menu('bb-ddown-admin', 'Verwaltung', [verwaltung, bericht, importieren]);
+      var erstesMenue = Array.prototype.find.call(menuNav.children, function (el) {
+        return el.matches('.bb-theme-toggle, .bb-ddown');
+      }) || null;
+      menuNav.insertBefore(m, erstesMenue);
+    }
+
+    // Menü mit dem eigenen Namen
+    var logon = banner.querySelector('nav.logon');
+    var meine = logon && logon.querySelector('#show_my_entries');
+    if (meine) {
+      var knopfMeine = meine.querySelector('input[type="submit"]');
+      var name = knopfMeine ? knopfMeine.value : 'Mein Konto';
+      if (knopfMeine) {
+        knopfMeine.value = 'Meine Buchungen';
+        knopfMeine.title = 'Alle meine anstehenden Buchungen anzeigen';
+      }
+      var abmelden = Array.prototype.find.call(logon.querySelectorAll('form'), function (f) { return f !== meine; });
+      var konto = menu('bb-ddown-konto', name, [
+        meine,
+        link(menuNav, /bb_benachrichtigungen\.php/),
+        link(menuNav, /(^|\/)edit_users\.php/),
+        menuNav.querySelector('.bb-theme-toggle'),
+        abmelden
+      ]);
+      konto.querySelector('.bb-ddown-knopf').setAttribute('aria-label', 'Konto: ' + name);
+      // In nav.menu, damit die anderen Teile dieses Skripts ihre Punkte
+      // (Hell/Dunkel, Benachrichtigungen) dort weiter finden
+      menuNav.appendChild(konto);
+    }
+
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest || !e.target.closest('.bb-ddown')) { zu(null); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { zu(null); }
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', umbauen);
+  } else {
+    umbauen();
+  }
+  var start = function () {
+    new MutationObserver(umbauen).observe(document.body, { childList: true });
   };
   if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
 })();

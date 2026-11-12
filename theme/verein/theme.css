@@ -2075,3 +2075,128 @@ html.bb-nicht-buchbar .bb-tagesliste {
   opacity: 0.55;
 }
 html.bb-nicht-buchbar .bb-fab { display: none; }
+
+/* ---------- 21. Kopfzeile: eine Zeile mit Menüs (theme.js) ----------------- */
+/* Das Datumsfeld springt von selbst zum gewählten Tag, „Start“ braucht es nicht */
+.banner #form_nav input[type="submit"] { display: none; }
+.bb-ddown-titel { display: none; }
+
+@media (min-width: 701px) {
+  header.banner.bb-kopf { flex-wrap: nowrap; gap: 1.25rem; padding: 0.55rem 1.5rem; }
+  header.banner.bb-kopf .company { flex: none; }
+  header.banner.bb-kopf nav.container {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+  header.banner.bb-kopf nav.container > nav { display: contents; }
+  /* Kopfzeile über dem Plan, sonst verdeckt dessen feste Kopfzeile die Menüs */
+  header.banner.bb-kopf { position: relative; z-index: 700; }   /* MRBS: Tabellenkopf 610 */
+  /* Links und Menüs, Datum, Suche, Konto nebeneinander */
+  header.banner.bb-kopf nav.menu { display: contents; }
+  header.banner.bb-kopf nav.menu > * { order: 1; }
+  header.banner.bb-kopf #form_nav { order: 2; margin: 0 0 0 auto; }
+  header.banner.bb-kopf #form_nav + div { order: 3; }
+  header.banner.bb-kopf nav.menu > .bb-ddown-konto { order: 4; }
+  header.banner.bb-kopf nav.logon:empty,
+  header.banner.bb-kopf nav.logon:not(:has(*)) { display: none; }
+  header.banner.bb-kopf nav.container { justify-content: flex-start; }
+  header.banner.bb-kopf input.navigation,
+  header.banner.bb-kopf #form_nav .flatpickr-input { width: 6.75rem; text-align: center; padding: 0 0.5rem; }
+  header.banner.bb-kopf input[type="search"] { width: 7.25rem; }
+  header.banner.bb-kopf #form_nav + div { flex: none; }
+
+  /* aktuelle Seite */
+  header.banner.bb-kopf nav.menu > a[aria-current="page"] {
+    opacity: 1;
+    background: var(--bb-banner-hover);
+    box-shadow: inset 0 -2px 0 var(--bb-streifen);
+  }
+
+  /* Menüs Verwaltung und Konto */
+  .bb-ddown { position: relative; display: inline-flex; }
+  .bb-ddown-knopf {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 36px;
+    padding: 0.4rem 0.75rem;
+    border: 0;
+    border-radius: var(--bb-radius-sm);
+    background: none;
+    color: var(--bb-banner-text);
+    font: inherit;
+    font-size: 0.93rem;
+    opacity: 0.88;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .bb-ddown-konto > .bb-ddown-knopf {
+    border: 1px solid var(--bb-banner-field-border);
+    border-radius: 999px;
+    background: var(--bb-banner-field);
+    opacity: 1;
+  }
+  .bb-ddown-knopf:hover,
+  .bb-ddown-knopf:focus-visible,
+  .bb-ddown.offen > .bb-ddown-knopf { background: var(--bb-banner-hover); opacity: 1; outline: none; }
+  .bb-ddown-knopf:focus-visible { box-shadow: 0 0 0 3px var(--bb-focus); }
+  .bb-ddown-knopf svg { transition: transform 0.15s; }
+  .bb-ddown.offen > .bb-ddown-knopf svg { transform: rotate(180deg); }
+
+  .bb-ddown-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 60;
+    min-width: 230px;
+    padding: 0.4rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: var(--bb-banner);
+    border: 1px solid var(--bb-banner-field-border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  .bb-ddown.offen > .bb-ddown-panel { display: flex; }
+  .banner .bb-ddown-panel > a,
+  .bb-ddown-panel input[type="submit"],
+  .bb-ddown-panel > .bb-theme-toggle {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0.55rem 0.75rem;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--bb-banner-text);
+    font: inherit;
+    font-size: 0.93rem;
+    justify-content: flex-start;
+    text-align: left;
+    opacity: 0.92;
+    cursor: pointer;
+  }
+  .bb-ddown-panel > form { margin: 0; display: block; }
+  .bb-ddown-panel > a:hover, .bb-ddown-panel input[type="submit"]:hover,
+  .bb-ddown-panel > .bb-theme-toggle:hover,
+  .bb-ddown-panel > a:focus-visible, .bb-ddown-panel input[type="submit"]:focus-visible,
+  .bb-ddown-panel > .bb-theme-toggle:focus-visible { background: var(--bb-banner-hover); opacity: 1; }
+  .bb-ddown-panel > .bb-theme-toggle { min-height: 0; border-top: 1px solid var(--bb-banner-field-border); border-radius: 0; margin-top: 0.25rem; padding-top: 0.7rem; }
+  .bb-ddown-panel > form:last-child { border-top: 1px solid var(--bb-banner-field-border); margin-top: 0.25rem; padding-top: 0.25rem; }
+}
+
+/* Handy: Menüs aufgeklappt untereinander im Blatt „Mehr“ */
+@media (max-width: 700px) {
+  .bb-ddown, .bb-ddown-panel { display: contents; }
+  .bb-ddown-knopf { display: none; }
+  html.bb-ohne-kopf .banner nav.container .bb-menu-plan { display: none !important; }
+}
