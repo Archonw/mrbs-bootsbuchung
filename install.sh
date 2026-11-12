@@ -410,6 +410,7 @@ chmod +x maintenance/*.sh update.sh
   echo "45 2 * * * root $INSTALL_DIR/maintenance/session-cleanup.sh >> /var/log/bootsbuchung.log 2>&1"
   echo "15 3 * * * root $INSTALL_DIR/maintenance/db-sicherung.sh >> /var/log/bootsbuchung.log 2>&1"
   [ "$MAIL_ON" = 1 ] && echo "0 18 * * * root $INSTALL_DIR/maintenance/kurs-erinnerung.sh >> /var/log/bootsbuchung.log 2>&1"
+  echo "*/15 * * * * root $INSTALL_DIR/maintenance/fahrt-erinnerung.sh >> /var/log/bootsbuchung.log 2>&1"
 } > /etc/cron.d/bootsbuchung
 chmod 644 /etc/cron.d/bootsbuchung
 date '+%F %T' > .installiert

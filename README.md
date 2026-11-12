@@ -38,6 +38,9 @@ The user interface is German.*
   [Bootsbuchung für Vereine](https://github.com/Archonw/bootsbuchung-app)
 - Push-Nachrichten statt (oder zusätzlich zu) Mails – jedes Mitglied
   entscheidet selbst auf der Seite „Benachrichtigungen“
+- **Erinnerung zwei Stunden vor der eigenen Fahrt** als Push, mit Wind
+- **Kalender-Abo:** eigene Buchungen und Anmeldungen automatisch im
+  Kalender des Handys (Seite „Meine Fahrten“)
 
 **Mitsegler willkommen**
 - Wer nicht allein segeln will, hakt „Mitsegler willkommen“ an – andere
