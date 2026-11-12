@@ -1,0 +1,212 @@
+diff --git a/web/bb_warteliste.inc b/web/bb_warteliste.inc
+new file mode 100644
+index 0000000..7d3bbb9
+--- /dev/null
++++ b/web/bb_warteliste.inc
+@@ -0,0 +1,159 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung (warteliste.patch): Warteliste für volle Fahrten und Kurse
++//
++// Tabelle mrbs_bb_warteliste (sql/warteliste.sql). Ist eine Fahrt mit
++// „Mitsegler willkommen“ oder ein Kurs voll, kann man sich eintragen
++// (registration_handler.php, action=warteliste / warteliste_raus; der Knopf
++// kommt aus dem Theme). Wird ein Platz frei, rückt der Erste automatisch nach
++// und bekommt dieselbe Bestätigung wie bei einer normalen Anmeldung.
++// =============================================================================
++
++function bb_warteliste_da() : bool
++{
++  static $da = null;
++  if (!isset($da))
++  {
++    try
++    {
++      db()->query1("SELECT COUNT(*) FROM " . _tbl('bb_warteliste'));
++      $da = true;
++    }
++    catch (\Throwable $e)
++    {
++      $da = false;   // sql/warteliste.sql noch nicht eingespielt
++    }
++  }
++  return $da;
++}
++
++
++// Benutzernamen in der Reihenfolge der Eintragung
++function bb_warteliste(int $entry_id) : array
++{
++  if (!bb_warteliste_da())
++  {
++    return [];
++  }
++  $res = db()->query("SELECT username FROM " . _tbl('bb_warteliste') . " WHERE entry_id=? ORDER BY eingetragen, id",
++                     [$entry_id]);
++  $namen = [];
++  while (false !== ($row = $res->next_row_keyed()))
++  {
++    $namen[] = $row['username'];
++  }
++  return $namen;
++}
++
++
++// Freie Plätze einer Buchung (null = unbegrenzt, 0 = voll)
++function bb_warteliste_frei(array $data) : ?int
++{
++  if (empty($data['registrant_limit_enabled']))
++  {
++    return null;
++  }
++  return max(0, (int) $data['registrant_limit'] - count($data['registrants'] ?? []));
++}
++
++
++function bb_warteliste_eintragen(string $username, int $entry_id) : void
++{
++  if (!bb_warteliste_da())
++  {
++    return;
++  }
++  $data = get_booking_info($entry_id, false);
++  if (empty($data) || empty($data['allow_registration']) || ((int) $data['end_time'] < time()))
++  {
++    return;
++  }
++  $user = session()->getCurrentUser();
++  // nur sich selbst (oder Admins/Segellehrer andere, wie bei der Anmeldung)
++  if (!isset($user) || !(compare_usernames($username, $user->username) === 0 || can_register_others((int) $data['room_id'])))
++  {
++    return;
++  }
++  if (compare_usernames($username, $data['create_by']) === 0 ||
++      in_arrayi($username, array_column($data['registrants'] ?? [], 'username')) ||
++      bb_warteliste_frei($data) !== 0)
++  {
++    return;   // Schiffsführer, schon angemeldet, oder es gibt noch Platz
++  }
++  db()->command("INSERT IGNORE INTO " . _tbl('bb_warteliste') . " (entry_id, username, eingetragen) VALUES (?, ?, ?)",
++                [$entry_id, $username, time()]);
++}
++
++
++function bb_warteliste_austragen(string $username, int $entry_id) : void
++{
++  if (!bb_warteliste_da())
++  {
++    return;
++  }
++  $user = session()->getCurrentUser();
++  $data = get_booking_info($entry_id, false);
++  if (!isset($user) || empty($data) ||
++      !(compare_usernames($username, $user->username) === 0 || can_register_others((int) $data['room_id'])))
++  {
++    return;
++  }
++  db()->command("DELETE FROM " . _tbl('bb_warteliste') . " WHERE entry_id=? AND username=?", [$entry_id, $username]);
++}
++
++
++// Freie Plätze mit der Warteliste auffüllen. Gibt die Nachgerückten zurück.
++function bb_warteliste_nachruecken(int $entry_id) : array
++{
++  if (!bb_warteliste_da())
++  {
++    return [];
++  }
++  $nachgerueckt = [];
++  db()->mutex_lock(_tbl('participants'));
++  try
++  {
++    $data = get_booking_info($entry_id, false);
++    if (empty($data) || empty($data['allow_registration']) || ((int) $data['start_time'] < time()))
++    {
++      return [];
++    }
++    $frei = bb_warteliste_frei($data);
++    $angemeldet = array_column($data['registrants'] ?? [], 'username');
++    foreach (bb_warteliste($entry_id) as $name)
++    {
++      if ($frei !== null && $frei <= 0)
++      {
++        break;
++      }
++      db()->command("DELETE FROM " . _tbl('bb_warteliste') . " WHERE entry_id=? AND username=?", [$entry_id, $name]);
++      if (in_arrayi($name, $angemeldet) || compare_usernames($name, $data['create_by']) === 0)
++      {
++        continue;
++      }
++      add_registrant($entry_id, ['username' => $name, 'create_by' => $name, 'registered' => time()]);
++      $nachgerueckt[] = $name;
++      if ($frei !== null)
++      {
++        $frei--;
++      }
++    }
++  }
++  finally
++  {
++    db()->mutex_unlock(_tbl('participants'));
++  }
++
++  if ($nachgerueckt)
++  {
++    require_once 'bb_kurs.inc';
++    foreach ($nachgerueckt as $name)
++    {
++      bb_anmeldung_mail($entry_id, $name, true);
++    }
++  }
++  return $nachgerueckt;
++}
+diff --git a/web/registration_handler.php b/web/registration_handler.php
+index 773ecba..ac28eb5 100644
+--- a/web/registration_handler.php
++++ b/web/registration_handler.php
+@@ -51,6 +51,10 @@ function cancel_registration(int $registration_id) : void
+   // Bootsbuchung-Anpassung: Bestätigung und Info an den Segellehrer/Schiffsführer
+   require_once 'bb_kurs.inc';
+   bb_anmeldung_mail((int) $entry['id'], $registration['username'], false);
++
++  // Bootsbuchung-Anpassung (warteliste.patch): der Erste auf der Warteliste rückt nach
++  require_once 'bb_warteliste.inc';
++  bb_warteliste_nachruecken((int) $entry['id']);
+ }
+ 
+ 
+@@ -160,6 +164,31 @@ try
+       else
+       {
+         bb_reihe_abmelden($username, $event_id);
++        // Bootsbuchung-Anpassung (warteliste.patch): frei gewordene Plätze der Reihe auffüllen
++        require_once 'bb_warteliste.inc';
++        foreach (bb_reihe_termine((int) (get_entry_by_id($event_id)['repeat_id'] ?? 0), $username) as $termin)
++        {
++          bb_warteliste_nachruecken((int) ($termin['id'] ?? 0));
++        }
++        bb_warteliste_nachruecken($event_id);
++      }
++      break;
++    // Bootsbuchung-Anpassung (warteliste.patch): Warteliste bei vollen Fahrten/Kursen
++    case 'warteliste':
++    case 'warteliste_raus':
++      $username = get_form_var('username', 'string');
++      if (!isset($username) || ($username === '') || !isset($event_id))
++      {
++        throw new UnexpectedValueException("No username or event_id received from form.");
++      }
++      require_once 'bb_warteliste.inc';
++      if ($action === 'warteliste')
++      {
++        bb_warteliste_eintragen($username, $event_id);
++      }
++      else
++      {
++        bb_warteliste_austragen($username, $event_id);
+       }
+       break;
+     case 'register':
