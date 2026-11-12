@@ -2840,6 +2840,131 @@
 
 
 /* =============================================================================
+   Verwaltung: Saisonstatistik
+
+   Für Admins oben auf admin.php: je Boot Buchungen, Stunden auf dem Wasser,
+   Auslastung der Saison, Kurse, Anmeldungen (Mitsegler und Kursteilnehmer),
+   Schadensmeldungen im Jahr und noch offene. Jahr wählbar, Download als CSV
+   für Excel. Daten aus Themes/verein/statistik.php (theme.css, 29.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var SPALTEN = [['name', 'Boot'], ['buchungen', 'Buchungen'], ['stunden', 'Stunden'], ['auslastung', 'Auslastung %'],
+                 ['kurse', 'Kurse'], ['mitsegler', 'Anmeldungen'], ['schaeden', 'Schäden'], ['offen', 'davon offen']];
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+  function zahl(v) { return typeof v === 'number' ? v.toLocaleString('de-DE') : v; }
+
+  function zeigen(box, d) {
+    var inhalt = box.querySelector('.bb-statistik-inhalt');
+    inhalt.textContent = '';
+    var t = function (iso) { var x = iso.split('-'); return x[2] + '.' + x[1] + '.' + x[0]; };
+    inhalt.appendChild(el('p', 'bb-statistik-saison', 'Saison ' + t(d.saison.beginn) + ' bis ' + t(d.saison.ende)));
+    var tabelle = el('table', 'bb-statistik-tabelle');
+    var kopf = el('tr');
+    SPALTEN.forEach(function (s) { kopf.appendChild(el('th', null, s[1])); });
+    tabelle.appendChild(el('thead')).appendChild(kopf);
+    var tb = el('tbody');
+    var summe = { name: 'Alle Boote' };
+    d.boote.forEach(function (b) {
+      var tr = el('tr');
+      SPALTEN.forEach(function (s) {
+        tr.appendChild(el(s[0] === 'name' ? 'th' : 'td', null, zahl(b[s[0]])));
+        if (s[0] !== 'name' && s[0] !== 'auslastung') { summe[s[0]] = Math.round(((summe[s[0]] || 0) + b[s[0]]) * 10) / 10; }
+      });
+      tb.appendChild(tr);
+    });
+    var gesamt = el('tr', 'bb-statistik-summe');
+    SPALTEN.forEach(function (s) {
+      var wert = s[0] === 'auslastung'
+        ? (d.boote.length ? Math.round(d.boote.reduce(function (a, b) { return a + b.auslastung; }, 0) / d.boote.length * 10) / 10 : 0)
+        : summe[s[0]];
+      gesamt.appendChild(el(s[0] === 'name' ? 'th' : 'td', null, zahl(wert)));
+    });
+    tb.appendChild(gesamt);
+    tabelle.appendChild(tb);
+    var huelle = el('div', 'bb-statistik-huelle');
+    huelle.appendChild(tabelle);
+    inhalt.appendChild(huelle);
+    inhalt.appendChild(el('p', 'bb-statistik-hinweis',
+      'Auslastung: gebuchte Stunden im Verhältnis zu allen buchbaren Stunden der Saison. Anmeldungen: Mitsegler und Kursteilnehmer.'));
+
+    var csv = el('button', 'bb-statistik-csv', 'Als CSV (Excel)');
+    csv.type = 'button';
+    csv.addEventListener('click', function () {
+      var zeilen = [SPALTEN.map(function (s) { return s[1]; }).join(';')];
+      d.boote.forEach(function (b) {
+        zeilen.push(SPALTEN.map(function (s) {
+          var v = b[s[0]];
+          return typeof v === 'number' ? String(v).replace('.', ',') : '"' + String(v).replace(/"/g, '""') + '"';
+        }).join(';'));
+      });
+      var blob = new Blob(['﻿' + zeilen.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+      var a = el('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'saisonstatistik-' + d.jahr + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    });
+    inhalt.appendChild(csv);
+
+    var wahl = box.querySelector('select');
+    if (!wahl.options.length) {
+      d.jahre.slice().reverse().forEach(function (j) {
+        var o = el('option', null, String(j));
+        o.value = j;
+        wahl.appendChild(o);
+      });
+    }
+    wahl.value = d.jahr;
+  }
+
+  function laden(box, jahr) {
+    fetch('Themes/verein/statistik.php' + (jahr ? '?jahr=' + jahr : ''), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.boote) { zeigen(box, d); } else { box.remove(); } })
+      .catch(function () { box.remove(); });
+  }
+
+  function init() {
+    if (!/(^|\/)admin\.php$/.test(location.pathname) || document.querySelector('.bb-statistik')) { return; }
+    // MRBS hat ein verstecktes .contents für alte Browser – das sichtbare nehmen
+    var alle = Array.prototype.slice.call(document.querySelectorAll('.contents'));
+    var ziel = alle.filter(function (c) { return c.offsetParent !== null; })[0] || alle[alle.length - 1];
+    if (!ziel) { return; }
+    var box = el('details', 'bb-statistik');
+    var sum = el('summary', null, 'Saisonstatistik');
+    box.appendChild(sum);
+    var leiste = el('div', 'bb-statistik-leiste');
+    var label = el('label', null, 'Jahr ');
+    var wahl = el('select');
+    label.appendChild(wahl);
+    leiste.appendChild(label);
+    box.appendChild(leiste);
+    box.appendChild(el('div', 'bb-statistik-inhalt', 'Wird geladen …'));
+    wahl.addEventListener('change', function () { laden(box, wahl.value); });
+    var geladen = false;
+    box.addEventListener('toggle', function () {
+      if (box.open && !geladen) { geladen = true; laden(box, null); }
+    });
+    ziel.insertBefore(box, ziel.firstChild);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+
+/* =============================================================================
    Plan: bis wann gebucht werden kann
 
    Unter dem Datum steht, bis zu welchem Tag gerade gebucht werden kann, und

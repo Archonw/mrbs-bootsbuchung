@@ -6,6 +6,15 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Saisonstatistik in der Verwaltung
+
+- **Saisonstatistik** (nur Admins, oben unter Verwaltung zum Aufklappen): je
+  Boot Buchungen, Stunden auf dem Wasser, Auslastung der Saison, Kurse,
+  Anmeldungen (Mitsegler und Kursteilnehmer), Schadensmeldungen im Jahr und
+  davon noch offene; Jahr wählbar, Download als CSV für Excel.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Push-Erinnerung vor der Fahrt
 
 - **Erinnerung:** Etwa zwei Stunden vor Beginn bekommen alle, die gebucht
