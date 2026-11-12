@@ -1,0 +1,120 @@
+diff --git a/web/bb_freigabe.inc b/web/bb_freigabe.inc
+new file mode 100644
+index 0000000..62016a4
+--- /dev/null
++++ b/web/bb_freigabe.inc
+@@ -0,0 +1,91 @@
++<?php
++declare(strict_types=1);
++namespace MRBS;
++
++// =============================================================================
++// Bootsbuchung-Anpassung (freigabe.patch): Boote nur mit Freigabe
++//
++// Für Vereine, in denen manche Boote nur bestimmte Mitglieder segeln dürfen
++// (z. B. „Kielboot nur mit SKS“, „Laser ab 14 Jahren“).
++//
++// AUS, solange in der config.inc.php nicht steht:
++//   $bb_freigaben = true;
++// Dann gibt es unter Verwaltung den Abschnitt „Freigaben pro Boot“: je Boot
++// „nur mit Freigabe“ und die Mitglieder, die es buchen dürfen. Buchungen
++// anderer lehnt mrbsCheckPolicy() ab (Admins bekommen nur einen Hinweis).
++// Optional, wen man fragen soll (erscheint in der Meldung):
++//   $bb_freigaben_kontakt = 'den Bootswart';
++//
++// Tabellen (sql/freigabe.sql, legt update.sh immer an, auch wenn aus):
++//   mrbs_bb_freigabe_boot  room_id             Boot braucht eine Freigabe
++//   mrbs_bb_freigabe       room_id, username   wer es buchen darf
++// =============================================================================
++
++function bb_freigaben_an() : bool
++{
++  global $bb_freigaben;
++  return !empty($bb_freigaben);
++}
++
++
++// Braucht das Boot eine Freigabe?
++function bb_freigabe_noetig(int $room_id) : bool
++{
++  static $cache = null;
++  if (!bb_freigaben_an())
++  {
++    return false;
++  }
++  if (!isset($cache))
++  {
++    $cache = [];
++    try
++    {
++      $res = db()->query("SELECT room_id FROM " . _tbl('bb_freigabe_boot'));
++      while (false !== ($row = $res->next_row_keyed()))
++      {
++        $cache[(int) $row['room_id']] = true;
++      }
++    }
++    catch (\Throwable $e)
++    {
++      // Tabelle fehlt (sql/freigabe.sql nicht eingespielt)
++    }
++  }
++  return isset($cache[$room_id]);
++}
++
++
++// Darf dieses Mitglied das Boot buchen?
++function bb_freigabe_hat(int $room_id, string $username) : bool
++{
++  if (!bb_freigabe_noetig($room_id))
++  {
++    return true;
++  }
++  try
++  {
++    return db()->query1("SELECT COUNT(*) FROM " . _tbl('bb_freigabe') . " WHERE room_id=? AND username=?",
++                        [$room_id, $username]) > 0;
++  }
++  catch (\Throwable $e)
++  {
++    return true;
++  }
++}
++
++
++// Text für die Regelverletzung, oder null
++function bb_freigabe_verletzung(array $booking) : ?string
++{
++  global $bb_freigaben_kontakt;
++  $room_id = (int) ($booking['room_id'] ?? 0);
++  $wer = (string) ($booking['create_by'] ?? '');
++  if ($wer === '' || bb_freigabe_hat($room_id, $wer))
++  {
++    return null;
++  }
++  $kontakt = trim((string) ($bb_freigaben_kontakt ?? ''));
++  return 'Für dieses Boot brauchst du eine Freigabe' .
++         ($kontakt !== '' ? ' – bitte frag ' . $kontakt : '') . '.';
++}
+diff --git a/web/mrbs_sql.inc b/web/mrbs_sql.inc
+index f1b5db4..a3d0b4a 100644
+--- a/web/mrbs_sql.inc
++++ b/web/mrbs_sql.inc
+@@ -532,6 +532,18 @@ function mrbsCheckPolicy(array $booking, ?int $ignore_entry_id=null, ?int $ignor
+ 
+   $violations = array();
+ 
++  // Bootsbuchung-Anpassung (freigabe.patch): Boote nur mit Freigabe – nur wenn
++  // $bb_freigaben in der config.inc.php eingeschaltet ist
++  if (!$delete)
++  {
++    require_once 'bb_freigabe.inc';
++    $bb_freigabe = bb_freigabe_verletzung($booking);
++    if (isset($bb_freigabe))
++    {
++      $violations[] = $bb_freigabe;
++    }
++  }
++
+   // If the user is a booking admin for this room then we still check for policy
+   // violations, but they are for information only and are classed as 'notices'
+   $violation_status = (is_book_admin($booking['room_id']) && !$auth['admin_must_obey_policies']) ? 'notices' : 'errors';
