@@ -2539,3 +2539,46 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
 .bb-bootkarte.bb-gesperrt .bb-zeitleiste { opacity: 0.4; }
 .bb-gesperrt-hinweis { margin: 0.55rem 0 0; color: var(--bb-danger); font-weight: 600; font-size: 0.9rem; }
 .bb-bootkarte > header .bb-status { margin-left: 0; }
+
+
+/* ---------- 28. Lieblingsboote, Bootsklassen, Belegungsbalken (theme.js) --- */
+.bb-stern {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: -6px -8px -6px 0.25rem;
+  padding: 0;
+  border: 0 !important;
+  border-radius: 999px !important;
+  background: none !important;
+  box-shadow: none !important;
+  min-height: 0 !important;
+  color: var(--bb-muted) !important;
+  cursor: pointer;
+}
+.bb-stern[aria-pressed="true"] { color: var(--bb-warning) !important; }
+.bb-stern svg { width: 20px !important; height: 20px !important; flex: none; }
+.bb-stern[aria-pressed="true"] svg { fill: currentColor; }
+.bb-stern:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus) !important; }
+
+.bb-bootgruppe {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.6rem 0.6rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface-2);
+  box-shadow: inset 0 0 0 1px var(--bb-border);
+}
+.bb-bootgruppe > header { display: flex; align-items: baseline; gap: 0.5rem; padding: 0 0.4rem; }
+.bb-gruppenname { font-size: 1.05rem; font-weight: 800; }
+.bb-gruppeninfo { margin-left: auto; font-size: 0.8rem; color: var(--bb-muted); }
+.bb-bootgruppe .bb-bootkarte { box-shadow: none; padding: 0.7rem 0.85rem; }
+
+#bb-mitsegeln .plaetze { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.bb-belegung { display: block; width: 3.5rem; height: 5px; border-radius: 999px; background: var(--bb-border-soft); overflow: hidden; }
+.bb-belegung > i { display: block; height: 100%; border-radius: 999px; background: var(--bb-accent); }
+#bb-mitsegeln li.kurs .bb-belegung > i { background: var(--bb-kurs-strong); }
+#bb-mitsegeln li.bb-voll { opacity: 0.6; }
