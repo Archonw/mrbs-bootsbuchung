@@ -57,6 +57,13 @@ The user interface is German.*
 - Alle kommenden Kurse und Mitsegelgelegenheiten mit freien Plätzen
 - Filter „Meine“: eigene Buchungen und Anmeldungen auf einen Blick
 
+**Boot sperren**
+- Admins sperren ein Boot unter **Verwaltung → Boot bearbeiten → Gesperrt
+  bis** (mit Grund), z. B. für eine Reparatur. Buchungen in dieser Zeit lehnt
+  die Buchung ab, Plan und Formular zeigen „gesperrt bis …“ mit dem Grund
+- Offene Schadensmeldungen aus dem Logbuch stehen als „Schaden gemeldet“
+  am Boot im Plan
+
 **Wind und Wetter** (optional)
 - Vorhersage für das Revier im Plan und im Buchungsformular, Windwarnung
   (siehe [Wind und Wetter](#wind-und-wetter))

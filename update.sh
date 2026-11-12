@@ -162,6 +162,15 @@ $vocab_override['de']['room.fotos']          = 'Fotoablage (Link)';
 PHP
     ERGAENZT=1
   fi
+  if ! grep -q 'room.gesperrt_bis' "$CONF"; then
+    cat >> "$CONF" <<'PHP'
+
+// --- Boot sperren (ergänzt von update.sh) ---
+$vocab_override['de']['room.gesperrt_bis']   = 'Gesperrt bis (einschließlich)';
+$vocab_override['de']['room.gesperrt_grund'] = 'Grund der Sperre';
+PHP
+    ERGAENZT=1
+  fi
   if [ "$ERGAENZT" = 1 ]; then
     echo "==> Fehlende Einstellungen in $CONF ergänzt"
     docker compose restart mrbs >/dev/null

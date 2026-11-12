@@ -6,6 +6,20 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Boot sperren, Schäden im Plan
+
+- **Boot sperren:** Unter Verwaltung → Boot bearbeiten gibt es „Gesperrt bis
+  (einschließlich)“ und „Grund der Sperre“. Bis zu diesem Tag lehnt die
+  Buchung neue Buchungen für das Boot ab (Admins bekommen nur einen
+  Hinweis). Plan, Bootskarten und Buchungsformular zeigen „gesperrt bis …“,
+  am Handy steht der Grund statt der Frei-Knöpfe.
+- **Schaden gemeldet:** Boote mit offener Schadensmeldung im Logbuch tragen
+  im Plan und im Formular ein Schild.
+
+Für bestehende Installationen ist nichts von Hand zu tun: `update.sh` spielt
+`sperre.patch` und `sql/sperre.sql` ein und ergänzt die Beschriftungen in der
+`config.inc.php`.
+
 ## 2026-11-12 – Meine Fahrten und Kalender-Abo
 
 - **Meine Fahrten** (Handy: „Meine“, Computer: Mitsegeln & Kurse → Meine):

@@ -2555,6 +2555,128 @@
 
 
 /* =============================================================================
+   Bootsstatus: gesperrt und offene Schadensmeldungen
+
+   Aus Themes/verein/bootsstatus.php. Gesperrte Boote (Verwaltung → Boot
+   bearbeiten → „Gesperrt bis“) und Boote mit offener Schadensmeldung bekommen
+   ein Schild: im Plan im Kopf der Spalte bzw. Zeile, in den Bootskarten am
+   Handy und auf den Bootskacheln im Buchungsformular. Ist das Boot am
+   angezeigten Tag gesperrt, verschwinden die Knöpfe „Frei …“ seiner Karte.
+   Unter Verwaltung → Boot bearbeiten wird „Gesperrt bis“ ein Datumsfeld.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var daten = null;
+  function laden() {
+    if (!daten) {
+      daten = fetch('Themes/verein/bootsstatus.php', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .catch(function () { return {}; });
+    }
+    return daten;
+  }
+  function zwei(n) { return (n < 10 ? '0' : '') + n; }
+  function datumDe(iso) { var t = iso.split('-'); return t[2] + '.' + t[1] + '.'; }
+  function parameter(name, url) {
+    var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(url || '');
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function angezeigterTag() {
+    var a = document.querySelector('nav.view a.selected');
+    var href = a ? a.getAttribute('href') : location.search;
+    var d = parameter('page_date', href);
+    if (d) { return d; }
+    var j = parameter('year', href), m = parameter('month', href), t = parameter('day', href);
+    var h = new Date();
+    return (j && m && t) ? j + '-' + zwei(+m) + '-' + zwei(+t)
+                         : h.getFullYear() + '-' + zwei(h.getMonth() + 1) + '-' + zwei(h.getDate());
+  }
+  function schild(s, kurz) {
+    var e = document.createElement('span');
+    if (s.gesperrt_bis) {
+      e.className = 'bb-status bb-status-gesperrt';
+      e.textContent = 'gesperrt bis ' + datumDe(s.gesperrt_bis);
+      e.title = 'Gesperrt bis ' + datumDe(s.gesperrt_bis) + (s.grund ? ': ' + s.grund : '');
+    } else {
+      e.className = 'bb-status bb-status-schaden';
+      e.textContent = kurz ? 'Schaden' : 'Schaden gemeldet';
+      e.title = s.offen === 1 ? '1 offene Schadensmeldung im Logbuch' : s.offen + ' offene Schadensmeldungen im Logbuch';
+    }
+    return e;
+  }
+  function aktiv(s) { return s && (s.gesperrt_bis || s.offen); }
+
+  function anwenden(st) {
+    var tag = angezeigterTag();
+    // Plan: Kopf (Tag) bzw. Zeilenkopf (Woche aller Boote)
+    document.querySelectorAll('.dwm_main th[data-room]').forEach(function (th) {
+      var s = st[th.dataset.room];
+      if (!aktiv(s) || th.querySelector('.bb-status')) { return; }
+      (th.querySelector('a') || th).appendChild(schild(s, true));
+      if (s.gesperrt_bis && s.gesperrt_bis >= tag) { th.classList.add('bb-gesperrt'); }
+    });
+    // Handy: Bootskarten (Reihenfolge wie die Spalten der Tabelle)
+    var raeume = Array.prototype.map.call(document.querySelectorAll('#day_main thead th[data-room]'), function (th) { return th.dataset.room; });
+    document.querySelectorAll('.bb-tagesliste .bb-bootkarte').forEach(function (karte, i) {
+      var s = st[raeume[i]];
+      if (!aktiv(s) || karte.querySelector('.bb-status')) { return; }
+      var kopf = karte.querySelector('header');
+      kopf.insertBefore(schild(s, false), kopf.querySelector('.bb-kapazitaet'));
+      if (s.gesperrt_bis && s.gesperrt_bis >= tag) {
+        karte.classList.add('bb-gesperrt');
+        var frei = karte.querySelector('.bb-luecken, .bb-buchen');
+        var hinweis = document.createElement('p');
+        hinweis.className = 'bb-gesperrt-hinweis';
+        hinweis.textContent = 'Gesperrt bis ' + datumDe(s.gesperrt_bis) + (s.grund ? ': ' + s.grund : '');
+        if (frei) { frei.replaceWith(hinweis); } else { karte.appendChild(hinweis); }
+      }
+    });
+    // Buchungsformular: Bootskacheln
+    document.querySelectorAll('.bb-bootkachel').forEach(function (b) {
+      var s = st[b.dataset.room];
+      if (!aktiv(s) || b.querySelector('.bb-status')) { return; }
+      b.appendChild(schild(s, false));
+    });
+  }
+
+  function verwaltung() {
+    var feld = document.querySelector('input[name="f_gesperrt_bis"]');
+    if (feld && feld.type !== 'date') {
+      var wert = feld.value;
+      var m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(wert);
+      feld.type = 'date';
+      feld.value = m ? m[3] + '-' + zwei(+m[2]) + '-' + zwei(+m[1]) : wert;
+    }
+  }
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () {
+      geplant = false;
+      verwaltung();
+      if (!document.querySelector('.dwm_main th[data-room], .bb-bootkachel')) { return; }
+      laden().then(anwenden);
+    });
+  }
+  // verwaltung() auch direkt: requestAnimationFrame läuft in Tabs im
+  // Hintergrund erst, wenn sie sichtbar werden
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { verwaltung(); pruefen(); });
+  } else {
+    verwaltung();
+    pruefen();
+  }
+  var start = function () {
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
    Plan: bis wann gebucht werden kann
 
    Unter dem Datum steht, bis zu welchem Tag gerade gebucht werden kann, und
