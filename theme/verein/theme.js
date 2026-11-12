@@ -882,7 +882,7 @@
             var text = (link.firstChild && link.firstChild.nodeType === 3 && link.querySelector('.bb-buchung-info')
                         ? link.firstChild.nodeValue : link.textContent).trim();
             // Plätze am Ende: "[2/5]" (MRBS) oder " · 2/5" (deutsche Vorgabe)
-            var platz = text.match(/\s*(?:\[(\d+)(?:\/(\d+))?\]|·\s*(\d+)(?:\/(\d+))?)\s*$/);
+            var platz = text.match(/\s*(?:\[(\d+)(?:\/(\d+))?\]|·\s*(\d+)(?:\/(\d+))?(?::.*)?)\s*$/);
             var besetzt = platz ? (platz[1] || platz[3]) : null;
             var max = platz ? (platz[2] || platz[4]) : null;
             // schon von „Buchungen lesbar machen“ aufgeteilt?
@@ -2028,7 +2028,8 @@
   }
   // "Tina · 2/5" -> { name: "Tina", plaetze: "2/5" }; auch MRBS-Form "[2/5]"
   function teilen(text) {
-    var m = text.match(/\s*(?:\[(\d+)(?:\/(\d+))?\]|·\s*(\d+)(?:\/(\d+))?)\s*$/);
+    // auch mit Namen dahinter: " · 1/5: Tina, Max" (MRBS mit show_registrant_names)
+    var m = text.match(/\s*(?:\[(\d+)(?:\/(\d+))?\]|·\s*(\d+)(?:\/(\d+))?(?::.*)?)\s*$/);
     if (!m) { return { name: text.trim(), plaetze: '' }; }
     var b = m[1] || m[3], x = m[2] || m[4];
     return { name: text.slice(0, m.index).trim(), plaetze: b + (x ? '/' + x : '') };

@@ -6,6 +6,17 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Neue Screenshots, kleine Korrekturen
+
+- **Screenshots** im README zeigen den aktuellen Stand (Tag, Woche dunkel,
+  Mitsegeln & Kurse, Buchungsformular, Handy).
+- Belegung wird auch erkannt, wenn MRBS die Namen der Angemeldeten anhängt
+  („· 1/5: Tina“) – sie steht dann wieder als Schild in Woche und Karten.
+- Handy: Ein Schild wie „Schaden gemeldet“ steht in einer eigenen Zeile unter
+  dem Bootsnamen, Name und Platzzahl brechen nicht mehr um.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Boote nur mit Freigabe (optional)
 
 - **Freigaben pro Boot:** Wer möchte, dass manche Boote nur bestimmte
