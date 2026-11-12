@@ -70,6 +70,15 @@ The user interface is German.*
 - Offene Schadensmeldungen aus dem Logbuch stehen als „Schaden gemeldet“
   am Boot im Plan
 
+**Boote nur mit Freigabe** (optional, standardmäßig aus)
+- Für Vereine, in denen manche Boote nur bestimmte Mitglieder segeln dürfen
+  (z. B. „Kielboot nur mit SKS“). Einschalten in der `config.inc.php`:
+  `$bb_freigaben = true;` (optional `$bb_freigaben_kontakt = 'den Bootswart';`
+  für den Satz „bitte frag …“). Dann gibt es unter **Verwaltung** den
+  Abschnitt „Freigaben pro Boot“: je Boot „nur mit Freigabe“ und die
+  Mitglieder, die es buchen dürfen. Andere bekommen beim Buchen eine Meldung,
+  im Plan steht am Boot „nur mit Freigabe“. Ohne die Zeile ändert sich nichts.
+
 **Wind und Wetter** (optional)
 - Vorhersage für das Revier im Plan und im Buchungsformular, Windwarnung
   (siehe [Wind und Wetter](#wind-und-wetter))

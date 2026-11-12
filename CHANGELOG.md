@@ -6,6 +6,21 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Boote nur mit Freigabe (optional)
+
+- **Freigaben pro Boot:** Wer möchte, dass manche Boote nur bestimmte
+  Mitglieder buchen dürfen, schaltet das mit `$bb_freigaben = true;` in der
+  `config.inc.php` ein. Unter Verwaltung gibt es dann „Freigaben pro Boot“
+  (Boot ankreuzen, Mitglieder auswählen). Andere bekommen beim Buchen
+  „Für dieses Boot brauchst du eine Freigabe“, im Plan steht am Boot „nur mit
+  Freigabe“. Admins dürfen immer, bekommen aber einen Hinweis.
+  Optional `$bb_freigaben_kontakt = 'den Bootswart';` → „… bitte frag den
+  Bootswart.“
+
+Für bestehende Installationen ist nichts von Hand zu tun: Die Funktion ist
+aus, bis die Zeile in der Config steht. `update.sh` legt die beiden Tabellen
+(`sql/freigabe.sql`) trotzdem an, sie stören nicht.
+
 ## 2026-11-12 – Warteliste für volle Fahrten und Kurse
 
 - **Warteliste:** Ist eine Fahrt mit „Mitsegler willkommen“ oder ein Kurs

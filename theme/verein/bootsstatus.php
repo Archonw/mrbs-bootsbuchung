@@ -10,7 +10,8 @@ namespace MRBS;
 // gesperrt_bis/grund: Sperre aus Verwaltung → Boot bearbeiten (sperre.patch),
 // nur solange sie gilt. offen: Zahl der offenen Schadensmeldungen im
 // Wartungs-Logbuch (nur für angemeldete Mitglieder, wie das Logbuch selbst).
-// Boote ohne Besonderheit fehlen in der Liste.
+// freigabe: false, wenn das Boot eine Freigabe braucht, die dem angemeldeten
+// Mitglied fehlt (nur mit $bb_freigaben). Boote ohne Besonderheit fehlen.
 // =============================================================================
 
 $mrbs_root = null;
@@ -46,6 +47,25 @@ if (is_file('bb_sperre.inc'))
     if (isset($s))
     {
       $status[(string) $row['id']] = ['gesperrt_bis' => $s['bis'], 'grund' => $s['grund']];
+    }
+  }
+}
+
+// Boote, für die dem angemeldeten Mitglied die Freigabe fehlt (freigabe.patch,
+// nur wenn $bb_freigaben eingeschaltet ist)
+$ich = session()->getCurrentUser();
+if ($ich !== null && is_file('bb_freigabe.inc'))
+{
+  require_once 'bb_freigabe.inc';
+  if (bb_freigaben_an())
+  {
+    $res = db()->query("SELECT id FROM " . _tbl('room') . " WHERE disabled=0");
+    while (false !== ($row = $res->next_row_keyed()))
+    {
+      if (!bb_freigabe_hat((int) $row['id'], $ich->username))
+      {
+        $status[(string) $row['id']]['freigabe'] = false;
+      }
     }
   }
 }

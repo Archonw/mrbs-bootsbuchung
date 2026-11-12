@@ -2596,6 +2596,12 @@
   }
   function schild(s, kurz) {
     var e = document.createElement('span');
+    if (!s.gesperrt_bis && !s.offen && s.freigabe === false) {
+      e.className = 'bb-status bb-status-freigabe';
+      e.textContent = kurz ? 'Freigabe' : 'nur mit Freigabe';
+      e.title = 'Für dieses Boot brauchst du eine Freigabe';
+      return e;
+    }
     if (s.gesperrt_bis) {
       e.className = 'bb-status bb-status-gesperrt';
       e.textContent = 'gesperrt bis ' + datumDe(s.gesperrt_bis);
@@ -2607,7 +2613,7 @@
     }
     return e;
   }
-  function aktiv(s) { return s && (s.gesperrt_bis || s.offen); }
+  function aktiv(s) { return s && (s.gesperrt_bis || s.offen || s.freigabe === false); }
 
   function anwenden(st) {
     var tag = angezeigterTag();
@@ -3030,6 +3036,110 @@
           box.appendChild(el('p', 'bb-warteliste-namen', 'Warteliste: ' + w.namen.join(', ')));
         }
         if (box.children.length) { reg.appendChild(box); }
+      })
+      .catch(function () {});
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+
+/* =============================================================================
+   Verwaltung: Freigaben pro Boot (nur mit $bb_freigaben = true;)
+
+   Abschnitt auf admin.php: je Boot „nur mit Freigabe“ und die Mitglieder, die
+   es buchen dürfen. Ist die Funktion aus, liefert freigaben.php { an: false }
+   und hier erscheint nichts (freigabe.patch, theme.css 31.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+
+  function zeile(boot, mitglieder) {
+    var z = el('div', 'bb-freigabe-boot');
+    var kopf = el('label', 'bb-freigabe-kopf');
+    var noetig = el('input');
+    noetig.type = 'checkbox';
+    noetig.checked = boot.noetig;
+    kopf.appendChild(noetig);
+    kopf.appendChild(el('strong', null, boot.name));
+    kopf.appendChild(el('span', null, ' – nur mit Freigabe'));
+    z.appendChild(kopf);
+
+    var liste = el('div', 'bb-freigabe-liste');
+    var such = el('input', 'bb-freigabe-suche');
+    such.type = 'search';
+    such.placeholder = 'Mitglied suchen …';
+    liste.appendChild(such);
+    var box = el('div', 'bb-freigabe-mitglieder');
+    mitglieder.forEach(function (m) {
+      var l = el('label');
+      var c = el('input');
+      c.type = 'checkbox';
+      c.value = m.name;
+      c.checked = boot.mitglieder.indexOf(m.name) >= 0;
+      l.appendChild(c);
+      l.appendChild(document.createTextNode(' ' + m.anzeige));
+      box.appendChild(l);
+    });
+    such.addEventListener('input', function () {
+      var q = such.value.toLowerCase();
+      box.querySelectorAll('label').forEach(function (l) { l.hidden = q && l.textContent.toLowerCase().indexOf(q) < 0; });
+    });
+    liste.appendChild(box);
+    z.appendChild(liste);
+    var zeigen = function () { liste.hidden = !noetig.checked; };
+    noetig.addEventListener('change', zeigen);
+    zeigen();
+
+    var knopf = el('button', 'bb-freigabe-speichern', 'Speichern');
+    knopf.type = 'button';
+    var status = el('span', 'bb-freigabe-status');
+    knopf.addEventListener('click', function () {
+      var daten = new URLSearchParams();
+      daten.append('room_id', boot.id);
+      daten.append('noetig', noetig.checked ? '1' : '0');
+      box.querySelectorAll('input:checked').forEach(function (c) { daten.append('mitglieder[]', c.value); });
+      var token = document.querySelector('input[name="csrf_token"]');
+      daten.append('csrf_token', token ? token.value : '');
+      status.textContent = 'Wird gespeichert …';
+      fetch('Themes/verein/freigaben.php', { method: 'POST', credentials: 'same-origin', body: daten })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { status.textContent = d && d.ok ? 'Gespeichert' : 'Speichern hat nicht geklappt'; })
+        .catch(function () { status.textContent = 'Speichern hat nicht geklappt'; });
+    });
+    var fuss = el('div', 'bb-freigabe-fuss');
+    fuss.appendChild(knopf);
+    fuss.appendChild(status);
+    z.appendChild(fuss);
+    return z;
+  }
+
+  function init() {
+    if (!/(^|\/)admin\.php$/.test(location.pathname) || document.querySelector('.bb-freigaben')) { return; }
+    fetch('Themes/verein/freigaben.php', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.an || document.querySelector('.bb-freigaben')) { return; }
+        var alle = Array.prototype.slice.call(document.querySelectorAll('.contents'));
+        var ziel = alle.filter(function (c) { return c.offsetParent !== null; })[0] || alle[alle.length - 1];
+        if (!ziel) { return; }
+        var box = el('details', 'bb-freigaben');
+        box.appendChild(el('summary', null, 'Freigaben pro Boot'));
+        box.appendChild(el('p', 'bb-freigaben-hinweis',
+          'Boote mit Haken dürfen nur die angekreuzten Mitglieder buchen. Admins dürfen immer, bekommen aber einen Hinweis.'));
+        d.boote.forEach(function (b) { box.appendChild(zeile(b, d.mitglieder)); });
+        var nach = ziel.querySelector('.bb-statistik');
+        ziel.insertBefore(box, nach ? nach.nextSibling : ziel.firstChild);
       })
       .catch(function () {});
   }
