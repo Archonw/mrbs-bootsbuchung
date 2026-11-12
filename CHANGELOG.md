@@ -6,6 +6,20 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Wind und Wetter
+
+- **Vorhersage** für das Revier im Plan (Tag: unter dem Datum, Woche: im
+  Kopf jedes Tages) und im Buchungsformular für die gewählte Zeit, mit
+  Warnung ab Böen 6 Bft. Daten von Open-Meteo, der Server fragt höchstens
+  einmal pro Stunde.
+
+**Für bestehende Installationen:** Ist aus, bis in der `config.inc.php` der
+Ort eingetragen ist (siehe README, „Wind und Wetter“):
+
+```php
+$bb_wetter = ['breite' => 51.745, 'laenge' => 7.215, 'ort' => 'Halterner Stausee'];
+```
+
 ## 2026-11-12 – Buchungsformular schneller ausfüllen
 
 - Abschnitte **Wann?**, **Welches Boot?**, **Mitsegler und Kurs**.

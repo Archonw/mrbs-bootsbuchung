@@ -2142,6 +2142,152 @@
 
 
 /* =============================================================================
+   Wind und Wetter
+
+   Ist in der config.inc.php ein Ort eingetragen ($bb_wetter, siehe
+   Themes/verein/wetter.php), zeigt der Plan die Vorhersage von Open-Meteo:
+   - Tag: „SW 3 Bft · Böen 5 · 13° · Sonnenuntergang 16:58“ unter dem Datum
+   - Woche: Windstärke im Kopf jedes Tages
+   - Buchungsformular: Wind in der gewählten Zeit, Warnung ab Böen 6 Bft
+   Farben: bis 4 Bft grün, 5 orange, ab 6 rot (theme.css, 24.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var daten = null;
+  function laden() {
+    if (!daten) {
+      daten = fetch('Themes/verein/wetter.php', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { return d && d.tage ? d : null; })
+        .catch(function () { return null; });
+    }
+    return daten;
+  }
+  function stufe(bft) { return bft >= 6 ? 'stark' : (bft >= 5 ? 'frisch' : 'ruhig'); }
+  function zwei(n) { return (n < 10 ? '0' : '') + n; }
+  function iso(d) { return d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate()); }
+  function parameter(name, url) {
+    var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(url || '');
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+
+  // --- Plan ------------------------------------------------------------------
+  function plan(w) {
+    var kopf = document.querySelector('.view_container .date_heading');
+    if (!kopf) { return; }
+    var gewaehlt = document.querySelector('nav.view a.selected');
+    var href = gewaehlt ? gewaehlt.getAttribute('href') : location.search;
+    var ansicht = parameter('view', href) || 'day';
+
+    if (ansicht === 'day') {
+      var datum = parameter('page_date', href);
+      if (!datum) {
+        var j = parameter('year', href), m = parameter('month', href), t = parameter('day', href);
+        datum = (j && m && t) ? j + '-' + zwei(+m) + '-' + zwei(+t) : iso(new Date());
+      }
+      var tag = w.tage[datum];
+      var alt = kopf.parentNode.querySelector('.bb-wetter');
+      if (alt && alt.dataset.fuer === datum) { return; }
+      if (alt) { alt.remove(); }
+      if (!tag) { return; }
+      var p = el('p', 'bb-wetter bb-wind-' + stufe(Math.max(tag.bft, tag.boeen_bft - 1)));
+      p.dataset.fuer = datum;
+      p.title = 'Vorhersage' + (w.ort ? ' für ' + w.ort : '') + ' (Open-Meteo)';
+      p.appendChild(el('strong', null, tag.richtung + ' ' + tag.bft + ' Bft'));
+      p.appendChild(document.createTextNode(' · Böen ' + tag.boeen_bft + ' · ' + tag.temp + '°' +
+        (tag.sonnenuntergang ? ' · Sonnenuntergang ' + tag.sonnenuntergang : '')));
+      var hinweis = kopf.parentNode.querySelector('.bb-planhinweis');
+      kopf.parentNode.insertBefore(p, hinweis ? hinweis.nextSibling : kopf.nextSibling);
+    } else {
+      document.querySelectorAll('.dwm_main thead th[data-date]').forEach(function (th) {
+        if (th.querySelector('.bb-wind')) { return; }
+        var tg = w.tage[th.dataset.date];
+        if (!tg) { return; }
+        var b = el('span', 'bb-wind bb-wind-' + stufe(Math.max(tg.bft, tg.boeen_bft - 1)), tg.bft + ' Bft');
+        b.title = tg.richtung + ' ' + tg.bft + ' Bft, Böen ' + tg.boeen_bft + ', ' + tg.temp + '°';
+        th.appendChild(b);
+      });
+    }
+  }
+
+  // --- Buchungsformular ---------------------------------------------------------
+  function formular(w) {
+    var start = document.getElementById('start_date');
+    var beginn = document.getElementById('start_seconds');
+    var ende = document.getElementById('end_seconds');
+    var zeile = start && start.closest('.start_end');
+    if (!start || !beginn || !ende || !zeile) { return; }
+    var p = document.querySelector('.bb-wetter-formular');
+    if (!p) {
+      p = el('p', 'bb-wetter bb-wetter-formular');
+      var endZeile = ende.closest('.start_end') || zeile;
+      var ziel = endZeile.querySelector('.bb-dauer') ? endZeile.querySelector('.bb-dauer').parentNode : ende.parentNode;
+      ziel.appendChild(p);
+    }
+    var tag = w.tage[start.value];
+    if (!tag) { p.hidden = true; return; }
+    var von = Math.floor(parseInt(beginn.value, 10) / 3600);
+    var bis = Math.ceil(parseInt(ende.value, 10) / 3600);
+    var endDatum = document.getElementById('end_date');
+    if (endDatum && endDatum.value !== start.value) { bis = 24; }
+    var max = 0, boe = 0, richtung = tag.richtung;
+    for (var h = von; h < Math.max(bis, von + 1) && h < 24; h++) {
+      var s = tag.stunden[h];
+      if (s) {
+        if (s.bft >= max) { max = s.bft; richtung = s.richtung; }
+        boe = Math.max(boe, s.boeen_bft);
+      }
+    }
+    p.hidden = false;
+    p.className = 'bb-wetter bb-wetter-formular bb-wind-' + stufe(Math.max(max, boe - 1));
+    p.textContent = 'Vorhersage ' + von + '–' + Math.min(Math.max(bis, von + 1), 24) + ' Uhr: ' + richtung + ' ' + max +
+                    ' Bft, Böen ' + boe + (boe >= 6 ? ' – Reffen einplanen oder lieber verschieben.' : '') +
+                    (tag.sonnenuntergang ? ' · Sonnenuntergang ' + tag.sonnenuntergang : '');
+  }
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () {
+      geplant = false;
+      var istPlan = !!document.querySelector('.view_container .date_heading');
+      var istFormular = !!document.querySelector('form#main[action$="edit_entry_handler.php"]');
+      if (!istPlan && !istFormular) { return; }
+      laden().then(function (w) {
+        if (!w) { return; }
+        if (istPlan) { plan(w); }
+        if (istFormular) { formular(w); }
+      });
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pruefen);
+  } else {
+    pruefen();
+  }
+  var start = function () {
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+  // Formular: bei geänderter Zeit neu berechnen
+  document.addEventListener('change', function (e) {
+    if (e.target && /^(start_date|start_seconds|end_seconds|end_date)$/.test(e.target.id || '')) { pruefen(); }
+  });
+  if (window.jQuery) {
+    window.jQuery(document).on('change', '#start_seconds, #end_seconds, #start_date, #end_date', pruefen);
+  }
+})();
+
+
+/* =============================================================================
    Plan: bis wann gebucht werden kann
 
    Unter dem Datum steht, bis zu welchem Tag gerade gebucht werden kann, und
