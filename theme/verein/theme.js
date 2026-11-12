@@ -305,8 +305,9 @@
         return;
       }
       if (fieldset) {
-        var legend = fieldset.querySelector('legend');
-        fieldset.insertBefore(row, legend ? legend.nextSibling : fieldset.firstChild);
+        // nach der Legende bzw. der Überschrift „Mitsegler und Kurs“ (Buchungsformular, unten)
+        var vor = fieldset.querySelector(':scope > .bb-abschnitt-zeile') || fieldset.querySelector('legend');
+        fieldset.insertBefore(row, vor ? vor.nextSibling : fieldset.firstChild);
       }
       row.classList.add('bb-kurs-field');
       // Nicht-Segellehrer sehen das Feld nur, wenn die Buchung schon ein Kurs ist
@@ -1096,11 +1097,12 @@
 })();
 
 /* =============================================================================
-   Handy: Buchungsformular – Prüfung als Satz
+   Buchungsformular – Prüfung als Satz
 
    MRBS prüft beim Ausfüllen, ob das Boot frei ist und die Regeln passen, und
    zeigt das nur als ✗/✓ mit Text beim Überfahren mit der Maus. Am Handy gibt
-   es kein Überfahren: Hier steht bei einem Problem der Text über dem Knopf
+   es kein Überfahren, und auch am Computer übersieht man die Haken: Hier
+   steht das Ergebnis als Satz (grün, oder bei einem Problem der Text) über dem Knopf
    „Speichern“ (theme.css, 16.).
    ============================================================================= */
 (function () {
@@ -1109,6 +1111,7 @@
   function einrichten() {
     var checks = document.getElementById('checks');
     if (!checks) { return; }
+    document.documentElement.classList.add('bb-pruefung-satz');
     var p = document.createElement('p');
     p.className = 'bb-pruefung';
     p.setAttribute('aria-live', 'polite');
@@ -1118,14 +1121,19 @@
 
     function zeigen() {
       var text = '';
+      var gut = 0;
       ['conflict_check', 'policy_check'].forEach(function (id) {
         var s = document.getElementById(id);
+        if (s && s.classList.contains('good')) { gut++; }
         if (!text && s && s.classList.contains('bad')) {
           text = (s.getAttribute('title') || '').replace(/[ \t]+$/gm, '').replace(/\n{2,}/g, '\n').trim();
         }
       });
-      p.textContent = text;
-      p.hidden = !text;
+      // Alles in Ordnung: das auch sagen (statt zwei kleiner Haken)
+      var ok = !text && gut === 2;
+      p.classList.toggle('bb-pruefung-ok', ok);
+      p.textContent = ok ? 'Das Boot ist frei und die Buchung passt zu den Regeln.' : text;
+      p.hidden = !p.textContent;
     }
     zeigen();
     new MutationObserver(zeigen).observe(checks, { subtree: true, attributes: true, attributeFilter: ['class', 'title'] });
@@ -1785,6 +1793,209 @@
 
 
 /* =============================================================================
+   Buchungsformular: schneller ausfüllen
+
+   - Abschnitte „Wann?“, „Welches Boot?“, „Mitsegler und Kurs“
+   - Schiffsführer ist bei einer neuen Buchung mit dem eigenen Namen vorbelegt
+   - unter „Ende“ Knöpfe für die Dauer (1 bis 4 Stunden)
+   - Boote als antippbare Kacheln mit Platzzahl statt Mehrfach-Liste
+     (die Liste bleibt im Formular, die Kacheln schalten sie nur um)
+   - „Gibt es etwas zu melden?“ zugeklappt am Ende, offen wenn schon Text da ist
+   - der Knopf sagt, was passiert: „Pirat buchen“ statt „Speichern“
+   Alles wirkt nur auf die sichtbaren Felder, gespeichert wird wie bisher.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+  function wechsel(feld) {      // MRBS hört per jQuery auf "change"
+    if (window.jQuery) { window.jQuery(feld).trigger('change'); }
+    else { feld.dispatchEvent(new Event('change', { bubbles: true })); }
+  }
+  function zeile(feld) { return feld && feld.closest('fieldset > div, #registration'); }
+  // Als eigene Zeile mit leerer Beschriftung: Am Computer ist das Formular
+  // eine Tabelle (Beschriftung | Feld), so steht die Überschrift über den Feldern
+  function ueberschrift(vor, text) {
+    if (!vor || (vor.previousElementSibling && vor.previousElementSibling.classList.contains('bb-abschnitt-zeile'))) { return; }
+    var z = el('div', 'bb-abschnitt-zeile');
+    z.appendChild(el('span', 'bb-abschnitt-leer'));
+    z.appendChild(el('h3', 'bb-abschnitt', text));
+    vor.parentNode.insertBefore(z, vor);
+  }
+
+  function einrichten() {
+    var form = document.querySelector('form#main[action$="edit_entry_handler.php"]');
+    if (!form || form.dataset.bbFormular === '1') { return; }
+    form.dataset.bbFormular = '1';
+    var neu = !/[?&]id=\d+/.test(location.search);
+
+    // Schiffsführer vorbelegen
+    var name = document.getElementById('name');
+    var meineKnopf = document.querySelector('#show_my_entries input[type="submit"]');
+    var ich = document.documentElement.dataset.bbName ||
+              (meineKnopf && meineKnopf.value !== 'Meine Buchungen' ? meineKnopf.value : '');
+    if (neu && name && !name.value && ich) { name.value = ich; }
+
+    // Abschnitte
+    var start = document.getElementById('start_date');
+    var zeitZeile = start && start.closest('.start_end');
+    ueberschrift(zeitZeile, 'Wann?');
+    ueberschrift(document.getElementById('div_rooms'), 'Welches Boot?');
+    var regFeld = document.getElementById('registration');
+    var regErste = regFeld && Array.prototype.find.call(regFeld.children, function (k) {
+      return k.tagName === 'DIV' || k.tagName === 'LEGEND';
+    });
+    ueberschrift(regErste, 'Mitsegler und Kurs');
+    var kursZeile = regFeld && regFeld.querySelector('.bb-kurs-field');
+    var regKopf = regFeld && regFeld.querySelector(':scope > .bb-abschnitt-zeile');
+    if (kursZeile && regKopf && kursZeile.parentNode === regFeld) { regFeld.insertBefore(kursZeile, regKopf.nextSibling); }
+
+    // Dauer-Knöpfe unter „Ende“
+    var ende = document.getElementById('end_seconds');
+    var beginn = document.getElementById('start_seconds');
+    var endeZeile = ende && ende.closest('.start_end');
+    if (ende && beginn && endeZeile && !form.querySelector('.bb-dauer')) {
+      var dauer = el('div', 'bb-dauer');
+      dauer.setAttribute('role', 'group');
+      dauer.setAttribute('aria-label', 'Dauer');
+      var knoepfe = [];
+      [1, 2, 3, 4].forEach(function (h) {
+        var b = el('button', null, h + ' Std.');
+        b.type = 'button';
+        b.addEventListener('click', function () {
+          var ziel = String(parseInt(beginn.value, 10) + h * 3600);
+          var opt = Array.prototype.find.call(ende.options, function (o) { return o.value === ziel; });
+          if (opt) { ende.value = ziel; wechsel(ende); markieren(); }
+        });
+        b.dataset.std = h;
+        knoepfe.push(b);
+        dauer.appendChild(b);
+      });
+      function markieren() {
+        var d = (parseInt(ende.value, 10) - parseInt(beginn.value, 10)) / 3600;
+        var gleicherTag = !document.getElementById('end_date') || !start ||
+                          document.getElementById('end_date').value === start.value;
+        knoepfe.forEach(function (b) {
+          var an = gleicherTag && +b.dataset.std === d;
+          b.setAttribute('aria-pressed', an ? 'true' : 'false');
+          var ziel = String(parseInt(beginn.value, 10) + (+b.dataset.std) * 3600);
+          b.disabled = !Array.prototype.some.call(ende.options, function (o) { return o.value === ziel; });
+        });
+      }
+      ende.parentNode.appendChild(dauer);
+      ende.addEventListener('change', markieren);
+      beginn.addEventListener('change', function () { window.setTimeout(markieren, 0); });
+      if (window.jQuery) {
+        window.jQuery(ende).on('change', markieren);
+        window.jQuery(beginn).on('change', function () { window.setTimeout(markieren, 50); });
+      }
+      markieren();
+    }
+
+    // Boote als Kacheln
+    var rooms = document.getElementById('rooms');
+    var roomZeile = document.getElementById('div_rooms');
+    if (rooms && roomZeile && rooms.multiple && !roomZeile.querySelector('.bb-bootwahl')) {
+      var wahl = el('div', 'bb-bootwahl');
+      wahl.setAttribute('role', 'group');
+      wahl.setAttribute('aria-label', 'Boot');
+      var kacheln = [];
+      Array.prototype.forEach.call(rooms.options, function (o) {
+        var b = el('button', 'bb-bootkachel');
+        b.type = 'button';
+        b.appendChild(el('span', 'bb-bootkachel-name', o.textContent.trim()));
+        b.appendChild(el('span', 'bb-bootkachel-plaetze', ''));
+        b.dataset.room = o.value;
+        b.addEventListener('click', function (e) {
+          // Ein Tipp wählt dieses Boot; mit Strg/Cmd wie bisher mehrere
+          if (e.ctrlKey || e.metaKey) {
+            o.selected = !o.selected;
+          } else {
+            Array.prototype.forEach.call(rooms.options, function (x) { x.selected = (x === o); });
+          }
+          wechsel(rooms);
+          zeigen();
+        });
+        kacheln.push(b);
+        wahl.appendChild(b);
+      });
+      function zeigen() {
+        kacheln.forEach(function (b, i) {
+          b.setAttribute('aria-pressed', rooms.options[i].selected ? 'true' : 'false');
+        });
+        knopfText();
+      }
+      rooms.addEventListener('change', zeigen);
+      if (window.jQuery) { window.jQuery(rooms).on('change', zeigen); }
+      roomZeile.classList.add('bb-mit-kacheln');
+      // Liste, Kacheln und Hinweis in eine Zelle (Tabellen-Layout am Computer)
+      var zelle = el('div', 'bb-bootwahl-zelle');
+      rooms.parentNode.insertBefore(zelle, rooms);
+      Array.prototype.slice.call(roomZeile.children).forEach(function (k) {
+        if (k !== zelle && k.tagName !== 'LABEL') { zelle.appendChild(k); }
+      });
+      zelle.appendChild(wahl);
+      zelle.appendChild(el('p', 'bb-bootwahl-hinweis', 'Mehrere Boote: mit gedrückter Strg-Taste (Mac: Cmd) anklicken.'));
+      zeigen();
+      window.addEventListener('load', zeigen);
+      fetch('Themes/verein/kapazitaet.php', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (k) {
+          if (!k || !k.rooms) { return; }
+          kacheln.forEach(function (b) {
+            var c = k.rooms[b.dataset.room];
+            if (c) { b.querySelector('.bb-bootkachel-plaetze').textContent = c === 1 ? '1 Platz' : c + ' Plätze'; }
+          });
+        })
+        .catch(function () {});
+    }
+
+    // „Gibt es etwas zu melden?“ zugeklappt ans Ende
+    var meldung = document.getElementById('description');
+    var mZeile = zeile(meldung);
+    var reg = document.getElementById('registration');
+    if (mZeile && mZeile.tagName === 'DIV' && !form.querySelector('.bb-meldung')) {
+      var details = el('details', 'bb-meldung');
+      var summary = el('summary', null, 'Etwas am Boot kaputt oder fehlt etwas?');
+      details.appendChild(summary);
+      var fotos = mZeile.nextElementSibling && mZeile.nextElementSibling.classList.contains('bb-fotos')
+                ? mZeile.nextElementSibling : null;
+      // als Zeile (leere Beschriftung | aufklappbarer Bereich), wie die Überschriften
+      var halter = el('div', 'bb-meldung-zeile');
+      halter.appendChild(el('span', 'bb-abschnitt-leer'));
+      halter.appendChild(details);
+      var altesFeld = mZeile.parentNode;
+      details.appendChild(mZeile);
+      if (fotos) { details.appendChild(fotos); }
+      if (meldung.value.trim()) { details.open = true; }
+      (reg || altesFeld).appendChild(halter);
+    }
+
+    // Knopf: „Pirat buchen“
+    var speichern = form.querySelector('input[name="save_button"]');
+    function knopfText() {
+      if (!speichern || !neu || !rooms) { return; }
+      var gewaehlt = Array.prototype.filter.call(rooms.options, function (o) { return o.selected; });
+      speichern.value = gewaehlt.length === 1 ? gewaehlt[0].textContent.trim() + ' buchen'
+                      : (gewaehlt.length > 1 ? gewaehlt.length + ' Boote buchen' : 'Buchen');
+    }
+    knopfText();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', einrichten);
+  } else {
+    einrichten();
+  }
+})();
+
+
+/* =============================================================================
    Plan: Buchungen lesbar machen
 
    Tagesansicht (und Woche eines Bootes): In jeder Buchung steht unter dem
@@ -2245,6 +2456,7 @@
     if (meine) {
       var knopfMeine = meine.querySelector('input[type="submit"]');
       var name = knopfMeine ? knopfMeine.value : 'Mein Konto';
+      if (knopfMeine) { document.documentElement.dataset.bbName = name; }
       if (knopfMeine) {
         knopfMeine.value = 'Meine Buchungen';
         knopfMeine.title = 'Alle meine anstehenden Buchungen anzeigen';

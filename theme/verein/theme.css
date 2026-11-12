@@ -1513,7 +1513,6 @@ form label, .form_general label { color: var(--bb-text); font-weight: 600; }
 }
 
 /* ---------- 16. Handy: Buchungsformular (edit_entry.php) ------------------ */
-.bb-pruefung { display: none; }
 
 @media (max-width: 700px) {
   /* MRBS ordnet die Zeilen mit float und festen Breiten an – am Handy wird
@@ -2320,3 +2319,90 @@ html.bb-nicht-buchbar .bb-fab { display: none; }
 @media (max-width: 700px), (pointer: coarse) {
   .bb-legende-mitsegeln i { background: var(--bb-mitsegeln); box-shadow: none; }
 }
+
+
+/* ---------- 23. Buchungsformular: schneller ausfüllen (theme.js) ---------- */
+/* Prüfung als Satz, jetzt auch am Computer (statt zwei kleiner Haken) */
+.bb-pruefung {
+  display: block;
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bb-danger) 12%, transparent);
+  color: var(--bb-danger);
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: pre-line;
+}
+.bb-pruefung.bb-pruefung-ok { background: var(--bb-accent-tint); color: var(--bb-on-tint); }
+.bb-pruefung[hidden] { display: none; }
+html.bb-pruefung-satz #checks { display: none !important; }
+
+/* Abschnitte */
+form#main .bb-abschnitt-zeile > * { padding-top: 1rem; }
+form#main .bb-abschnitt {
+  clear: both;
+  margin: 0;
+  padding: 1rem 0 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bb-muted);
+}
+
+/* Dauer-Knöpfe, Bootskacheln */
+.bb-dauer { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.bb-bootwahl { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; width: 42rem; max-width: 100%; }
+.bb-bootwahl-zelle { min-width: 0; }
+@media (max-width: 700px) {
+  .bb-bootwahl { width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .start_end > div > .bb-dauer { grid-column: 1 / -1; margin-top: 0; }
+  form#main .bb-bootkachel { margin: 0; }
+}
+form#main .bb-dauer > button,
+form#main .bb-bootkachel {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0.3rem 0.85rem;
+  border: 1px solid var(--bb-field-border);
+  border-radius: 10px;
+  background: var(--bb-surface);
+  color: var(--bb-text);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+form#main .bb-bootkachel { min-height: 50px; padding: 0.35rem 0.75rem; }
+.bb-bootkachel-plaetze { font-size: 0.75rem; font-weight: 500; color: var(--bb-muted); }
+form#main .bb-dauer > button[aria-pressed="true"],
+form#main .bb-bootkachel[aria-pressed="true"] {
+  border-color: var(--bb-accent);
+  background: var(--bb-accent);
+  color: var(--bb-on-accent);
+}
+.bb-bootkachel[aria-pressed="true"] .bb-bootkachel-plaetze { color: var(--bb-on-accent); opacity: 0.85; }
+form#main .bb-dauer > button:disabled { opacity: 0.4; cursor: default; }
+.bb-dauer > button:focus-visible, .bb-bootkachel:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+/* Mit Kacheln ist die Liste überflüssig, sie bleibt nur fürs Speichern im Formular */
+#div_rooms.bb-mit-kacheln select[multiple],
+#div_rooms.bb-mit-kacheln .select2-container { display: none !important; }
+.bb-bootwahl-hinweis { flex-basis: 100%; margin: 0.35rem 0 0; font-size: 0.78rem; color: var(--bb-muted); }
+@media (pointer: coarse) { .bb-bootwahl-hinweis { display: none; } }
+
+
+/* „Etwas kaputt?“ zugeklappt */
+form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
+.bb-meldung > div { margin-top: 0.4rem; }
+.bb-meldung > summary {
+  cursor: pointer;
+  padding: 0.6rem 0.2rem;
+  font-weight: 600;
+  color: var(--bb-link);
+  list-style-position: inside;
+}
+.bb-meldung[open] > summary { margin-bottom: 0.5rem; }
