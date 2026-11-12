@@ -2639,3 +2639,12 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
 .bb-freigabe-fuss { display: flex; align-items: center; gap: 0.75rem; margin: 0.5rem 0 0 1.6rem; }
 .bb-freigabe-status { font-size: 0.85rem; color: var(--bb-muted); }
 .bb-freigaben label::after { content: none !important; }
+
+/* Bootskarte am Handy: Schild (gesperrt, Schaden, Freigabe) in eine eigene
+   Zeile unter dem Namen, damit Name und Platzzahl nicht umbrechen */
+.bb-kapazitaet { white-space: nowrap; }
+@media (max-width: 700px) {
+  .bb-bootkarte > header:has(.bb-status) { flex-wrap: wrap; row-gap: 0.25rem; }
+  .bb-bootkarte > header:has(.bb-status)::after { content: ""; order: 9; flex-basis: 100%; }
+  .bb-bootkarte > header .bb-status { order: 10; }
+}
