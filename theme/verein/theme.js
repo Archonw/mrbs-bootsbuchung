@@ -2418,6 +2418,143 @@
 
 
 /* =============================================================================
+   Meine Fahrten (bb_mitsegeln.php?filter=meine)
+
+   - Überschrift „Meine Fahrten“
+   - die nächste Fahrt groß oben, mit Wind für diese Zeit (wetter.php)
+   - Kalender-Abo: persönlicher Link (kalender.php), mit dem alle eigenen
+     Buchungen und Anmeldungen im Kalender des Handys erscheinen
+   Aussehen in theme.css, 26.
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var MONATE = ['januar', 'februar', 'märz', 'april', 'mai', 'juni', 'juli', 'august',
+                'september', 'oktober', 'november', 'dezember'];
+  function zwei(n) { return (n < 10 ? '0' : '') + n; }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) { e.className = cls; }
+    if (text != null) { e.textContent = text; }
+    return e;
+  }
+  // "Donnerstag, 12. November" -> Date (dieses oder nächstes Jahr)
+  function tagAusText(text) {
+    var m = /(\d{1,2})\.\s*([A-Za-zäöüÄÖÜ]+)/.exec(text || '');
+    if (!m) { return null; }
+    var monat = MONATE.indexOf(m[2].toLowerCase());
+    if (monat < 0) { return null; }
+    var heute = new Date();
+    var d = new Date(heute.getFullYear(), monat, +m[1]);
+    if (d < new Date(heute.getFullYear(), heute.getMonth(), heute.getDate()) - 31 * 864e5) { d.setFullYear(d.getFullYear() + 1); }
+    return d;
+  }
+  function wann(d) {
+    var heute = new Date(); heute.setHours(0, 0, 0, 0);
+    var diff = Math.round((d - heute) / 864e5);
+    if (diff === 0) { return 'heute'; }
+    if (diff === 1) { return 'morgen'; }
+    return ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d.getDay()] + ' ' + zwei(d.getDate()) + '.' + zwei(d.getMonth() + 1) + '.';
+  }
+
+  function naechste(box) {
+    var erste = box.querySelector('li.bb-fahrt');
+    if (!erste || box.querySelector('.bb-naechste')) { return; }
+    var tagLi = erste.previousElementSibling;
+    while (tagLi && !tagLi.classList.contains('bb-tag')) { tagLi = tagLi.previousElementSibling; }
+    var datum = tagAusText(tagLi ? tagLi.textContent : '');
+    var a = erste.querySelector('a');
+    var zeit = (erste.querySelector('.zeit') || {}).textContent || '';
+    var karte = el('a', 'bb-naechste');
+    karte.href = a ? a.getAttribute('href') : '#';
+    karte.appendChild(el('span', 'bb-naechste-kopf', 'Nächste Fahrt' + (datum ? ' · ' + wann(datum) : '')));
+    karte.appendChild(el('span', 'bb-naechste-boot', (erste.querySelector('.boot') || {}).textContent || ''));
+    karte.appendChild(el('span', 'bb-naechste-zeit', zeit.replace(/\s+/g, ' ').trim() + ' Uhr'));
+    var leitung = erste.querySelector('.leitung');
+    if (leitung) { karte.appendChild(el('span', 'bb-naechste-info', leitung.textContent)); }
+    var plaetze = (erste.querySelector('.plaetze') || {}).textContent;
+    if (plaetze && plaetze.trim()) { karte.appendChild(el('span', 'bb-naechste-info', 'Angemeldet: ' + plaetze.trim())); }
+    var wind = el('span', 'bb-naechste-wind');
+    karte.appendChild(wind);
+    var filter = box.querySelector('.bb-filter');
+    box.insertBefore(karte, filter ? filter.nextSibling : box.querySelector('.bb-fahrten'));
+
+    if (datum) {
+      var iso = datum.getFullYear() + '-' + zwei(datum.getMonth() + 1) + '-' + zwei(datum.getDate());
+      var von = parseInt(zeit, 10);
+      var bis = parseInt((zeit.split(/[–-]/)[1] || '').trim(), 10) || von + 1;
+      fetch('Themes/verein/wetter.php', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (w) {
+          var tag = w && w.tage && w.tage[iso];
+          if (!tag) { return; }
+          var max = 0, boe = 0, richtung = tag.richtung;
+          for (var h = von; h < Math.max(bis, von + 1) && h < 24; h++) {
+            var s = tag.stunden[h];
+            if (s) { if (s.bft >= max) { max = s.bft; richtung = s.richtung; } boe = Math.max(boe, s.boeen_bft); }
+          }
+          wind.textContent = 'Wind ' + richtung + ' ' + max + ' Bft, Böen ' + boe + ' · ' + tag.temp + '°' +
+                             (tag.sonnenuntergang ? ' · Sonnenuntergang ' + tag.sonnenuntergang : '');
+          if (boe >= 6) { wind.classList.add('stark'); }
+        })
+        .catch(function () {});
+    }
+  }
+
+  function kalender(box) {
+    if (box.querySelector('.bb-kalender-abo')) { return; }
+    var k = el('section', 'bb-kalender-abo');
+    k.appendChild(el('h3', null, 'Im eigenen Kalender'));
+    k.appendChild(el('p', null, 'Mit dem Kalender-Abo stehen deine Buchungen und Anmeldungen automatisch im Kalender deines Handys oder Computers und bleiben aktuell.'));
+    var knoepfe = el('div', 'bb-kalender-knoepfe');
+    var abo = el('a', 'bb-kalender-knopf', 'Kalender abonnieren');
+    var kopieren = el('button', 'bb-kalender-kopieren', 'Link kopieren');
+    kopieren.type = 'button';
+    knoepfe.appendChild(abo);
+    knoepfe.appendChild(kopieren);
+    k.appendChild(knoepfe);
+    var hinweis = el('p', 'bb-kalender-hinweis', 'Google Kalender: Link kopieren, dann am Computer unter „Weitere Kalender → Per URL“ einfügen. Der Link ist persönlich – bitte nicht weitergeben.');
+    k.appendChild(hinweis);
+    box.appendChild(k);
+    fetch('Themes/verein/kalender.php?link=1', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { k.remove(); return; }
+        abo.href = d.webcal;
+        kopieren.addEventListener('click', function () {
+          var fertig = function () { kopieren.textContent = 'Kopiert'; setTimeout(function () { kopieren.textContent = 'Link kopieren'; }, 2000); };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(d.url).then(fertig, function () { window.prompt('Link kopieren:', d.url); });
+          } else {
+            window.prompt('Link kopieren:', d.url);
+          }
+        });
+      })
+      .catch(function () { k.remove(); });
+  }
+
+  function init() {
+    if (!/bb_mitsegeln\.php/.test(location.pathname) || !/[?&]filter=meine/.test(location.search)) { return; }
+    var box = document.getElementById('bb-mitsegeln');
+    if (!box || box.dataset.bbMeine === '1') { return; }
+    box.dataset.bbMeine = '1';
+    box.classList.add('bb-meine');
+    var h = box.querySelector('h2');
+    if (h) { h.textContent = 'Meine Fahrten'; }
+    var intro = box.querySelector('.bb-intro');
+    if (intro) { intro.textContent = 'Deine Buchungen und die Fahrten und Kurse, bei denen du angemeldet bist.'; }
+    naechste(box);
+    kalender(box);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+
+/* =============================================================================
    Plan: bis wann gebucht werden kann
 
    Unter dem Datum steht, bis zu welchem Tag gerade gebucht werden kann, und

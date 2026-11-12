@@ -2113,7 +2113,9 @@ html.bb-nicht-buchbar .table_container,
 html.bb-nicht-buchbar .bb-tagesliste {
   opacity: 0.55;
 }
-html.bb-nicht-buchbar .bb-fab { display: none; }
+html.bb-nicht-buchbar .bb-fab,
+html.bb-nicht-buchbar .bb-luecken,
+html.bb-nicht-buchbar .bb-buchen { display: none; }
 
 /* ---------- 21. Kopfzeile: eine Zeile mit Menüs (theme.js) ----------------- */
 /* Das Datumsfeld springt von selbst zum gewählten Tag, „Start“ braucht es nicht */
@@ -2472,3 +2474,47 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
   .bb-wochenstreifen a[aria-current="date"] b { color: var(--bb-on-accent); }
   .bb-wochenstreifen a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
 }
+
+
+/* ---------- 26. Meine Fahrten (theme.js, kalender.php) -------------------- */
+.bb-naechste {
+  display: grid;
+  gap: 0.2rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  background: var(--bb-accent);
+  color: var(--bb-on-accent) !important;
+  text-decoration: none !important;
+  box-shadow: var(--bb-shadow);
+}
+.bb-naechste-kopf { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; }
+.bb-naechste-boot { font-size: 1.35rem; font-weight: 800; line-height: 1.2; }
+.bb-naechste-zeit { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bb-naechste-info, .bb-naechste-wind { font-size: 0.88rem; opacity: 0.92; }
+.bb-naechste-wind:empty { display: none; }
+.bb-naechste-wind.stark { font-weight: 700; }
+.bb-naechste:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+
+.bb-kalender-abo {
+  margin: 1.5rem 0 0;
+  padding: 1rem 1.15rem;
+  border-radius: var(--bb-radius);
+  background: var(--bb-surface);
+  box-shadow: var(--bb-shadow);
+}
+.bb-kalender-abo h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+.bb-kalender-abo p { margin: 0 0 0.75rem; color: var(--bb-muted); font-size: 0.92rem; }
+.bb-kalender-knoepfe { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; }
+.bb-kalender-knopf {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 1.1rem;
+  border-radius: 10px;
+  background: var(--bb-accent);
+  color: var(--bb-on-accent) !important;
+  font-weight: 700;
+  text-decoration: none !important;
+}
+.bb-kalender-abo .bb-kalender-hinweis { font-size: 0.8rem; margin: 0; }

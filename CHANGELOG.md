@@ -6,6 +6,20 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Meine Fahrten und Kalender-Abo
+
+- **Meine Fahrten** (Handy: „Meine“, Computer: Mitsegeln & Kurse → Meine):
+  oben groß die nächste Fahrt mit Boot, Zeit, Belegung und Wind für diese
+  Zeit, darunter alle Buchungen und Anmeldungen wie bisher.
+- **Kalender-Abo:** Ein persönlicher Link bringt alle eigenen Buchungen und
+  Anmeldungen in den Kalender des Handys oder Computers (Apple, Google,
+  Outlook, Thunderbird) und hält sie aktuell. Knöpfe „Kalender abonnieren“
+  und „Link kopieren“ auf „Meine Fahrten“.
+- An nicht buchbaren Tagen verschwinden die Knöpfe „Frei ab …“ in den
+  Bootskarten.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Handy: Tag als Start, Wochenstreifen, Wischen
 
 - **Start am Handy:** Ist am Computer die Woche oder der Monat die
