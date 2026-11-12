@@ -6,6 +6,19 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Kopfzeile am Computer in einer Zeile
+
+- **Kopfzeile:** Am Computer steht alles in einer Zeile: vorne Plan,
+  Mitsegeln & Kurse, Boote und Hilfe, die aktuelle Seite ist hervorgehoben.
+  Bericht, Verwaltung und Importieren stecken für Admins im Menü
+  „Verwaltung“, Meine Buchungen, Benachrichtigungen, Benutzerliste,
+  Hell/Dunkel und Abmelden im Menü mit dem eigenen Namen.
+- Der Knopf „Start“ neben dem Datum entfällt: Das Datumsfeld springt schon
+  beim Auswählen zum Tag.
+- Am Handy bleibt alles im Blatt „Mehr“, wie bisher untereinander.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-12 – Plan zeigt, bis wann gebucht werden kann
 
 - **Plan:** Unter dem Datum steht jetzt „Buchbar bis Do 26.11.“. Liegt der
