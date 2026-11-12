@@ -2052,3 +2052,26 @@ dialog.bb-hilfe::backdrop { background: rgba(8, 10, 9, 0.55); }
   .bb-hilfe-wahl { flex-direction: column; align-items: stretch; gap: 0.25rem; }
   .bb-hilfe-wahl select { max-width: none; width: 100%; }
 }
+
+/* ---------- 20. Plan: bis wann gebucht werden kann (theme.js) ------------- */
+.bb-planhinweis {
+  margin: -0.25rem auto 0.9rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.3rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  background: var(--bb-accent-tint);
+  color: var(--bb-on-tint);
+}
+.bb-planhinweis-warnung {
+  background: color-mix(in srgb, var(--bb-warning) 14%, var(--bb-surface));
+  color: var(--bb-warning);
+}
+html.bb-nicht-buchbar .table_container,
+html.bb-nicht-buchbar .bb-tagesliste {
+  opacity: 0.55;
+}
+html.bb-nicht-buchbar .bb-fab { display: none; }

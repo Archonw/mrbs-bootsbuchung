@@ -1675,6 +1675,136 @@
 
 
 /* =============================================================================
+   Plan: bis wann gebucht werden kann
+
+   Unter dem Datum steht, bis zu welchem Tag gerade gebucht werden kann, und
+   ob der angezeigte Tag außerhalb der Saison oder noch zu weit in der Zukunft
+   liegt. Ohne diesen Hinweis merkt man das erst beim Speichern. Die Regeln
+   liefert Themes/verein/regeln.php aus denselben Einstellungen, die MRBS beim
+   Speichern prüft (Bereich, config.inc.php, Saison aus der Verwaltung).
+   Liegt der angezeigte Tag außerhalb, wird der Plan blass (theme.css, 20.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var cache = {};
+
+  function parameter(name, url) {
+    var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(url || location.search);
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function datum(iso) {          // "2026-11-26" -> Date (lokal, Mitternacht)
+    var t = iso.slice(0, 10).split('-');
+    return new Date(+t[0], +t[1] - 1, +t[2]);
+  }
+
+  var WOCHENTAG = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  function zwei(n) { return (n < 10 ? '0' : '') + n; }
+  function kurz(d) {             // "Do 26.11."
+    return WOCHENTAG[d.getDay()] + ' ' + zwei(d.getDate()) + '.' + zwei(d.getMonth() + 1) + '.';
+  }
+
+  function lang(d) {             // "26.11.2026"
+    return zwei(d.getDate()) + '.' + zwei(d.getMonth() + 1) + '.' + d.getFullYear();
+  }
+
+  function regeln(area) {
+    if (!cache[area]) {
+      cache[area] = fetch('Themes/verein/regeln.php' + (area ? '?area=' + encodeURIComponent(area) : ''),
+                          { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    }
+    return cache[area];
+  }
+
+  function zeigen() {
+    var kopf = document.querySelector('.view_container .date_heading');
+    if (!kopf) { return; }
+    var gewaehlt = document.querySelector('nav.view a.selected');
+    var href = gewaehlt ? gewaehlt.getAttribute('href') : location.search;
+    var ansicht = parameter('view', href) || 'day';
+    var seite = parameter('page_date', href);
+    var area = parameter('area', href);
+    var schluessel = ansicht + '|' + seite + '|' + area;
+    var alt = kopf.parentNode.querySelector('.bb-planhinweis');
+    if (alt && alt.dataset.fuer === schluessel) { return; }
+
+    regeln(area).then(function (r) {
+      if (!r || !document.contains(kopf)) { return; }
+      var heute = datum(r.heute);
+      var tag = seite ? datum(seite) : heute;
+      var bis = r.buchbar_bis ? datum(r.buchbar_bis) : null;
+      var beginn = r.saison && r.saison.beginn ? datum(r.saison.beginn) : null;
+      var ende = r.saison && r.saison.ende ? datum(r.saison.ende) : null;
+
+      var text = '';
+      var art = 'info';
+      var gesperrt = false;
+      if (ansicht === 'day' && tag >= heute) {
+        if ((beginn && tag < beginn) || (ende && tag > ende)) {
+          text = 'Außerhalb der Saison' + (beginn && ende ? ' (' + lang(beginn) + ' bis ' + lang(ende) + ')' : '') +
+                 ' – an diesem Tag kann nicht gebucht werden.';
+          art = 'warnung';
+          gesperrt = true;
+        } else if (bis && tag > bis) {
+          text = 'Noch nicht buchbar – gebucht werden kann höchstens ' + r.voraus_tage +
+                 (r.voraus_tage === 1 ? ' Tag' : ' Tage') + ' im Voraus, also bis ' + kurz(bis);
+          art = 'warnung';
+          gesperrt = true;
+        } else if (bis && tag.getTime() === bis.getTime()) {
+          text = 'Letzter buchbarer Tag: Die Fahrt muss bis ' + r.buchbar_bis.slice(11, 16) + ' Uhr ' +
+                 (r.gemessen_an === 'beginn' ? 'beginnen.' : 'enden.');
+        }
+      }
+      if (!text && bis && ansicht !== 'day') {
+        text = 'Buchbar bis ' + kurz(bis) + ' (' + r.voraus_tage + (r.voraus_tage === 1 ? ' Tag' : ' Tage') + ' im Voraus)';
+        if (ende && bis > ende) { text = 'Buchbar bis zum Saisonende am ' + lang(ende); }
+        if (ende && heute > ende) { text = 'Die Saison ist zu Ende (' + lang(ende) + ').'; art = 'warnung'; }
+      }
+      if (!text && bis && ansicht === 'day' && tag >= heute) {
+        text = 'Buchbar bis ' + kurz(bis);
+        if (ende && bis > ende) { text = 'Buchbar bis zum Saisonende am ' + lang(ende); }
+      }
+
+      var p = kopf.parentNode.querySelector('.bb-planhinweis');
+      if (!text) {
+        if (p) { p.remove(); }
+      } else {
+        if (!p) {
+          p = document.createElement('p');
+          p.setAttribute('role', 'status');
+          kopf.parentNode.insertBefore(p, kopf.nextSibling);
+        }
+        p.className = 'bb-planhinweis bb-planhinweis-' + art;
+        p.textContent = text;
+        p.dataset.fuer = schluessel;
+      }
+      document.documentElement.classList.toggle('bb-nicht-buchbar', gesperrt);
+    });
+  }
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () { geplant = false; zeigen(); });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pruefen);
+  } else {
+    pruefen();
+  }
+  // MRBS ersetzt beim Blättern den Seiteninhalt
+  var start = function () {
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) { start(); } else { document.addEventListener('DOMContentLoaded', start); }
+})();
+
+
+/* =============================================================================
    Menü der Kopfzeile ordnen
 
    Erst was alle Mitglieder brauchen, dann die Punkte für Admins, Hilfe zum

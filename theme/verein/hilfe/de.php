@@ -11,6 +11,11 @@
 //            mitglied (angemeldet), segellehrer, bootswartung, admin
 //   'html'   einfaches HTML (p, ul, ol, li, strong, em, a)
 //
+// Platzhalter (setzt hilfe.php aus den Einstellungen des Vereins ein):
+//   {buchungsregeln}  z. B. „Gebucht werden kann höchstens 14 Tage im Voraus,
+//                     nur während der Saison und täglich zwischen 7 Uhr und 22 Uhr.“
+//   {zu_weit}         z. B. „mehr als 14 Tage in der Zukunft“
+//
 // Bei Änderungen bitte auch hilfe/en.php und hilfe/es.php anpassen.
 // Eigene Texte des Vereins am besten in hilfe/de.local.php (gleicher Aufbau,
 // gleichnamige Seiten werden ersetzt) – die übersteht jedes Update.
@@ -99,7 +104,7 @@ return [
                  . '</ul>'],
         ['fuer' => 'mitglied', 'titel' => 'Ein Boot buchen',
          'html' => '<p>In der Tages- oder Wochenansicht auf ein <strong>freies Feld</strong> beim gewünschten Boot und zur gewünschten Uhrzeit tippen. Am Handy geht es auch über den runden <strong>+</strong>-Knopf. Dann öffnet sich das Buchungsformular.</p>'
-                 . '<p>Gebucht werden kann nur während der <strong>Saison</strong>. Wie weit im Voraus und zu welchen Uhrzeiten, legt der Verein fest; außerhalb davon lässt sich nicht speichern.</p>'],
+                 . '<p>{buchungsregeln} Außerhalb davon lässt sich nicht speichern. Oben im Plan steht, bis wann gerade gebucht werden kann.</p>'],
         ['fuer' => 'mitglied', 'titel' => 'Am Handy: Liste oder Raster',
          'html' => '<p>Die Tagesansicht zeigt am Handy jedes Boot als Karte mit seinen Buchungen. Mit dem Umschalter <strong>Liste / Raster</strong> bekommst du die klassische Tabelle zurück.</p>'],
         ['fuer' => 'admin', 'titel' => 'Fremde Buchungen, Serien, Saison',
@@ -126,7 +131,7 @@ return [
         ['fuer' => 'mitglied', 'titel' => 'Lässt sich nicht speichern?',
          'html' => '<ul>'
                  . '<li>Ist das Boot schon belegt, zeigt das Formular, mit welcher Buchung es sich überschneidet. Andere Zeit oder anderes Boot wählen.</li>'
-                 . '<li>Der Tag liegt zu weit in der Zukunft oder außerhalb der Saison.</li>'
+                 . '<li>Der Tag liegt {zu_weit} oder außerhalb der Saison.</li>'
                  . '<li>Am Handy steht der Knopf <strong>Speichern</strong> fest unten am Bildschirm.</li>'
                  . '</ul>'],
         ['fuer' => 'segellehrer', 'titel' => 'Als Kurs anbieten',

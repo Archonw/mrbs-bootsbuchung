@@ -6,6 +6,19 @@ genannten Zeilen von Hand in `/opt/bootsbuchung/config/config.inc.php`
 ergänzen und danach `cd /opt/bootsbuchung && docker compose restart mrbs`.
 (Neuinstallationen haben sie automatisch.)
 
+## 2026-11-12 – Plan zeigt, bis wann gebucht werden kann
+
+- **Plan:** Unter dem Datum steht jetzt „Buchbar bis Do 26.11.“. Liegt der
+  angezeigte Tag zu weit in der Zukunft oder außerhalb der Saison, sagt ein
+  Hinweis das gleich und der Plan wird blass – bisher merkte man es erst beim
+  Speichern. Am letzten buchbaren Tag steht, bis wann die Fahrt enden muss.
+- **Hilfe:** Die Regeln (wie viele Tage im Voraus, Uhrzeiten) stehen in der
+  deutschen Hilfe jetzt mit den echten Werten des Vereins. Sie kommen aus
+  denselben Einstellungen, die MRBS beim Speichern prüft, auch aus den
+  Einstellungen des Bereichs in der Verwaltung.
+
+Für bestehende Installationen ist nichts von Hand zu tun.
+
 ## 2026-11-07 – Handy: Seitenende nicht mehr von der Navigation verdeckt
 
 - **Handy:** Beim Runterscrollen verdeckten die App-Navigation unten und das
