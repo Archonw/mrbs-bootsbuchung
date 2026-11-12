@@ -2442,3 +2442,33 @@ form#main .bb-meldung-zeile > * { padding-top: 0.5rem; }
 @media (max-width: 700px) {
   .start_end > div > .bb-wetter-formular { grid-column: 1 / -1; }
 }
+
+
+/* ---------- 25. Handy: Wochenstreifen (theme.js) --------------------------- */
+.bb-wochenstreifen { display: none; }
+@media (max-width: 700px) {
+  .bb-wochenstreifen {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin: 0 0 0.75rem;
+  }
+  .bb-wochenstreifen a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 0.35rem 0 0.4rem;
+    border-radius: 12px;
+    color: var(--bb-muted) !important;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .bb-wochenstreifen b { font-size: 1.05rem; color: var(--bb-text); font-variant-numeric: tabular-nums; }
+  .bb-wochenstreifen a.heute b { color: var(--bb-accent); }
+  .bb-wochenstreifen a.vorbei, .bb-wochenstreifen a.gesperrt { opacity: 0.45; }
+  .bb-wochenstreifen a[aria-current="date"] { background: var(--bb-accent); color: var(--bb-on-accent) !important; opacity: 1; }
+  .bb-wochenstreifen a[aria-current="date"] b { color: var(--bb-on-accent); }
+  .bb-wochenstreifen a:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--bb-focus); }
+}

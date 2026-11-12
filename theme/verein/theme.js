@@ -2206,8 +2206,11 @@
       var hinweis = kopf.parentNode.querySelector('.bb-planhinweis');
       kopf.parentNode.insertBefore(p, hinweis ? hinweis.nextSibling : kopf.nextSibling);
     } else {
+      var erledigt = {};
       document.querySelectorAll('.dwm_main thead th[data-date]').forEach(function (th) {
-        if (th.querySelector('.bb-wind')) { return; }
+        // MRBS hat zwei Kopfzeilen mit data-date (Wochentag, Datum): nur einmal je Tag
+        if (erledigt[th.dataset.date] || th.querySelector('.bb-wind')) { erledigt[th.dataset.date] = true; return; }
+        erledigt[th.dataset.date] = true;
         var tg = w.tage[th.dataset.date];
         if (!tg) { return; }
         var b = el('span', 'bb-wind bb-wind-' + stufe(Math.max(tg.bft, tg.boeen_bft - 1)), tg.bft + ' Bft');
@@ -2283,6 +2286,133 @@
   });
   if (window.jQuery) {
     window.jQuery(document).on('change', '#start_seconds, #end_seconds, #start_date, #end_date', pruefen);
+  }
+})();
+
+
+/* =============================================================================
+   Handy: Tag als Start, Wochenstreifen, Wischen
+
+   - Startet der Plan am Handy in der Woche oder im Monat (Vorgabe des Vereins
+     am Computer), geht es gleich in die Tagesansicht. Wer Woche oder Monat
+     antippt, bleibt dort (dann steht view= in der Adresse).
+   - Über den Bootskarten ein Streifen mit den sieben Tagen der Woche, der
+     angezeigte Tag hervorgehoben, Tage außerhalb der Buchbarkeit blass.
+   - Nach links/rechts wischen blättert einen Tag weiter/zurück.
+   Nur auf schmalen Bildschirmen (theme.css, 25.).
+   ============================================================================= */
+(function () {
+  'use strict';
+
+  var schmal = window.matchMedia('(max-width: 700px)');
+  var TAGE = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  function zwei(n) { return (n < 10 ? '0' : '') + n; }
+  function iso(d) { return d.getFullYear() + '-' + zwei(d.getMonth() + 1) + '-' + zwei(d.getDate()); }
+  function parameter(name, url) {
+    var m = new RegExp('[?&]' + name + '=([^&#]*)').exec(url || '');
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  function startAlsTag() {
+    if (!schmal.matches || /[?&]view=/.test(location.search) || !/(^|\/)(index\.php)?$/.test(location.pathname)) { return false; }
+    var tag = document.querySelector('nav.view a.day:not(.selected)');
+    if (tag) { location.replace(tag.href); return true; }
+    return false;
+  }
+
+  function angezeigt(href) {
+    var d = parameter('page_date', href);
+    if (d) { return d; }
+    var j = parameter('year', href), m = parameter('month', href), t = parameter('day', href);
+    return (j && m && t) ? j + '-' + zwei(+m) + '-' + zwei(+t) : iso(new Date());
+  }
+
+  function streifen() {
+    if (!schmal.matches) { return; }
+    var liste = document.querySelector('.bb-tagesliste');
+    var tagLink = document.querySelector('nav.view a.day.selected');
+    if (!liste || !tagLink) { return; }
+    var datum = angezeigt(tagLink.getAttribute('href'));
+    var vorhanden = document.querySelector('.bb-wochenstreifen');
+    if (vorhanden && vorhanden.dataset.fuer === datum) { return; }
+    if (vorhanden) { vorhanden.remove(); }
+
+    var basis = tagLink.getAttribute('href').replace(/([?&])(page_date|year|month|day)=[^&]*/g, '$1').replace(/&&+/g, '&');
+    var t = datum.split('-');
+    var d = new Date(+t[0], +t[1] - 1, +t[2]);
+    var montag = new Date(d);
+    montag.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    var heute = iso(new Date());
+
+    var nav = document.createElement('nav');
+    nav.className = 'bb-wochenstreifen';
+    nav.setAttribute('aria-label', 'Tag dieser Woche wählen');
+    nav.dataset.fuer = datum;
+    for (var i = 0; i < 7; i++) {
+      var tag = new Date(montag);
+      tag.setDate(montag.getDate() + i);
+      var a = document.createElement('a');
+      var wert = iso(tag);
+      a.href = basis + (basis.indexOf('?') >= 0 ? '&' : '?') + 'page_date=' + wert;
+      a.dataset.datum = wert;
+      a.innerHTML = '<span></span><b></b>';
+      a.firstChild.textContent = TAGE[tag.getDay()];
+      a.lastChild.textContent = String(tag.getDate());
+      if (wert === datum) { a.setAttribute('aria-current', 'date'); }
+      if (wert === heute) { a.classList.add('heute'); }
+      if (wert < heute) { a.classList.add('vorbei'); }
+      nav.appendChild(a);
+    }
+    var ziel = document.querySelector('.bb-ansicht-umschalter') || liste;
+    ziel.parentNode.insertBefore(nav, ziel);
+
+    // Tage, an denen (noch) nicht gebucht werden kann, blass
+    fetch('Themes/verein/regeln.php' + (parameter('area', basis) ? '?area=' + parameter('area', basis) : ''), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (r) {
+        if (!r) { return; }
+        var bis = r.buchbar_bis ? r.buchbar_bis.slice(0, 10) : null;
+        nav.querySelectorAll('a').forEach(function (a) {
+          var x = a.dataset.datum;
+          if ((bis && x > bis) || (r.saison.beginn && x < r.saison.beginn) || (r.saison.ende && x > r.saison.ende)) {
+            a.classList.add('gesperrt');
+          }
+        });
+      })
+      .catch(function () {});
+  }
+
+  // Wischen auf der Liste
+  var x0 = null, y0 = null;
+  document.addEventListener('touchstart', function (e) {
+    if (!schmal.matches || !e.target.closest || !e.target.closest('.bb-tagesliste')) { x0 = null; return; }
+    x0 = e.touches[0].clientX;
+    y0 = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', function (e) {
+    if (x0 === null) { return; }
+    var dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > 45) { return; }
+    var pfeil = document.querySelector(dx < 0 ? 'nav.arrow a.next:not(.week)' : 'nav.arrow a.prev:not(.week)');
+    if (pfeil) { pfeil.click(); }
+  }, { passive: true });
+
+  var geplant = false;
+  function pruefen() {
+    if (geplant) { return; }
+    geplant = true;
+    window.requestAnimationFrame(function () { geplant = false; streifen(); });
+  }
+  function init() {
+    if (startAlsTag()) { return; }
+    pruefen();
+    new MutationObserver(pruefen).observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
   }
 })();
 
